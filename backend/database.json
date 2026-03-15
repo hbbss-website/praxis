@@ -1,0 +1,33 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "teacher1",
+      "password": "$2a$10$a/9psnYfuhW7DDMqvqJlzO9k79tkkg5E4nyVuYbsVUkfxrcNH4N5q",
+      "role": "teacher",
+      "name": "张老师",
+      "created_at": "2026-03-15T08:21:10.734Z"
+    },
+    {
+      "id": 2,
+      "username": "student1",
+      "password": "$2a$10$a/9psnYfuhW7DDMqvqJlzO9k79tkkg5E4nyVuYbsVUkfxrcNH4N5q",
+      "role": "student",
+      "name": "李明",
+      "created_at": "2026-03-15T08:21:10.735Z"
+    },
+    {
+      "id": 3,
+      "username": "student2",
+      "password": "$2a$10$a/9psnYfuhW7DDMqvqJlzO9k79tkkg5E4nyVuYbsVUkfxrcNH4N5q",
+      "role": "student",
+      "name": "王芳",
+      "created_at": "2026-03-15T08:21:10.735Z"
+    }
+  ],
+  "practice_records": [],
+  "nextId": {
+    "users": 4,
+    "practice_records": 1
+  }
+}

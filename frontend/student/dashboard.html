@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生中心 - 社会实践记录</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>社会实践系统</h2>
+                <span class="role-badge student">学生</span>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <a href="dashboard.html" class="active">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                    我的记录
+                </a>
+                <a href="upload.html">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    上传记录
+                </a>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar" id="user-avatar">学</div>
+                    <div class="user-details">
+                        <div class="user-name" id="user-name">加载中...</div>
+                        <div class="user-role">学生</div>
+                    </div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="logout()" style="width: 100%;">
+                    退出登录
+                </button>
+            </div>
+        </aside>
+        
+        <!-- 主内容 -->
+        <main class="main-content">
+            <div class="page-header">
+                <h1>我的社会实践记录</h1>
+                <p>查看和管理你上传的社会实践记录</p>
+            </div>
+            
+            <!-- 统计卡片 -->
+            <div class="stats-grid">
+                <div class="stat-card primary">
+                    <div class="stat-label">总记录数</div>
+                    <div class="stat-value" id="total-count">0</div>
+                </div>
+                <div class="stat-card warning">
+                    <div class="stat-label">待审核</div>
+                    <div class="stat-value" id="pending-count">0</div>
+                </div>
+                <div class="stat-card success">
+                    <div class="stat-label">已通过</div>
+                    <div class="stat-value" id="approved-count">0</div>
+                </div>
+            </div>
+            
+            <!-- 记录列表 -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">记录列表</h3>
+                    <a href="upload.html" class="btn btn-primary btn-sm">+ 新建记录</a>
+                </div>
+                <div id="records-container">
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <h3>暂无记录</h3>
+                        <p>点击"新建记录"上传你的第一份社会实践记录</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        
+        // 检查登录状态
+        const token = localStorage.getItem('token');
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        
+        if (!token || user.role !== 'student') {
+            window.location.href = '../login.html';
+        }
+        
+        // 显示用户信息
+        document.getElementById('user-name').textContent = user.name || user.username;
+        document.getElementById('user-avatar').textContent = (user.name || user.username).charAt(0);
+        
+        // 加载记录
+        loadRecords();
+        
+        async function loadRecords() {
+            try {
+                const response = await fetch(`${API_URL}/student/records`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        logout();
+                        return;
+                    }
+                    throw new Error('加载失败');
+                }
+                
+                const data = await response.json();
+                displayRecords(data.records);
+                updateStats(data.records);
+            } catch (error) {
+                console.error('加载记录失败:', error);
+            }
+        }
+        
+        function displayRecords(records) {
+            const container = document.getElementById('records-container');
+            
+            if (records.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <h3>暂无记录</h3>
+                        <p>点击"新建记录"上传你的第一份社会实践记录</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = '<div class="records-grid">' + records.map(record => `
+                <div class="record-card">
+                    ${record.image_path ? 
+                        `<img src="${API_URL.replace('/api', '')}${record.image_path}" class="record-image" alt="">` :
+                        `<div class="record-image" style="display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                            <svg width="48" height="48" fill="white" viewBox="0 0 24 24">
+                                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>`
+                    }
+                    <div class="record-content">
+                        <h4 class="record-title">${escapeHtml(record.title)}</h4>
+                        <div class="record-meta">
+                            <span>📅 ${formatDate(record.practice_date)}</span>
+                            ${record.location ? `<span>📍 ${escapeHtml(record.location)}</span>` : ''}
+                            ${record.duration ? `<span>⏱️ ${record.duration}小时</span>` : ''}
+                        </div>
+                        <p class="record-description">${escapeHtml(record.content)}</p>
+                        <div class="record-footer">
+                            <span class="status-badge status-${record.status}">
+                                ${record.status === 'pending' ? '待审核' : record.status === 'approved' ? '已通过' : '已驳回'}
+                            </span>
+                            <button class="btn btn-sm" onclick="viewDetail(${record.id})" style="background: var(--gray-100); color: var(--gray-800);">查看详情</button>
+                        </div>
+                        ${record.teacher_comment ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #f3f4f6; border-radius: 8px; font-size: 13px;">
+                                <strong>老师评语：</strong>${escapeHtml(record.teacher_comment)}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('') + '</div>';
+        }
+        
+        function updateStats(records) {
+            document.getElementById('total-count').textContent = records.length;
+            document.getElementById('pending-count').textContent = records.filter(r => r.status === 'pending').length;
+            document.getElementById('approved-count').textContent = records.filter(r => r.status === 'approved').length;
+        }
+        
+        function viewDetail(id) {
+            // 可以扩展为打开详情模态框
+            alert('记录ID: ' + id);
+        }
+        
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '../login.html';
+        }
+        
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('zh-CN');
+        }
+    </script>
+</body>
+</html>

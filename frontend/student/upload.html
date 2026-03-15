@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>上传记录 - 社会实践记录</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>社会实践系统</h2>
+                <span class="role-badge student">学生</span>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <a href="dashboard.html">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                    我的记录
+                </a>
+                <a href="upload.html" class="active">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    上传记录
+                </a>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar" id="user-avatar">学</div>
+                    <div class="user-details">
+                        <div class="user-name" id="user-name">加载中...</div>
+                        <div class="user-role">学生</div>
+                    </div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="logout()" style="width: 100%;">
+                    退出登录
+                </button>
+            </div>
+        </aside>
+        
+        <!-- 主内容 -->
+        <main class="main-content">
+            <div class="page-header">
+                <h1>上传社会实践记录</h1>
+                <p>填写你的社会实践信息并上传相关图片</p>
+            </div>
+            
+            <div class="card" style="max-width: 800px;">
+                <div class="error-message" id="error-message"></div>
+                <div class="success-message" id="success-message" style="display: none; background: #d1fae5; color: #065f46; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;"></div>
+                
+                <form id="upload-form">
+                    <div class="form-group">
+                        <label for="title">实践标题 *</label>
+                        <input type="text" id="title" name="title" placeholder="例如：社区志愿服务" required>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div class="form-group">
+                            <label for="practice_date">实践日期 *</label>
+                            <input type="date" id="practice_date" name="practice_date" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="duration">实践时长（小时）</label>
+                            <input type="number" id="duration" name="duration" placeholder="例如：4" min="0.5" step="0.5">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="location">实践地点</label>
+                        <input type="text" id="location" name="location" placeholder="例如：XX社区服务中心">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="content">实践内容 *</label>
+                        <textarea id="content" name="content" placeholder="详细描述你的社会实践内容、收获和感悟..." required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>实践照片</label>
+                        <div class="image-upload" id="image-upload" onclick="document.getElementById('image-input').click()">
+                            <input type="file" id="image-input" accept="image/*" style="display: none;" onchange="handleImageSelect(event)">
+                            <div id="upload-placeholder">
+                                <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-bottom: 12px; opacity: 0.5;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                                <p style="color: var(--gray-600);">点击上传图片</p>
+                                <p style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">支持 JPG、PNG、GIF，最大 5MB</p>
+                            </div>
+                            <img id="image-preview" style="display: none;">
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 12px; margin-top: 24px;">
+                        <a href="dashboard.html" class="btn btn-secondary" style="flex: 1;">取消</a>
+                        <button type="submit" class="btn btn-primary" id="submit-btn" style="flex: 1;">
+                            提交记录
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        let selectedImage = null;
+        
+        // 检查登录状态
+        const token = localStorage.getItem('token');
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        
+        if (!token || user.role !== 'student') {
+            window.location.href = '../login.html';
+        }
+        
+        // 显示用户信息
+        document.getElementById('user-name').textContent = user.name || user.username;
+        document.getElementById('user-avatar').textContent = (user.name || user.username).charAt(0);
+        
+        // 设置默认日期为今天
+        document.getElementById('practice_date').valueAsDate = new Date();
+        
+        // 图片选择处理
+        function handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            if (file.size > 5 * 1024 * 1024) {
+                showError('图片大小不能超过 5MB');
+                return;
+            }
+            
+            selectedImage = file;
+            
+            // 预览图片
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const preview = document.getElementById('image-preview');
+                const placeholder = document.getElementById('upload-placeholder');
+                const uploadBox = document.getElementById('image-upload');
+                
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                placeholder.style.display = 'none';
+                uploadBox.classList.add('has-image');
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        // 表单提交
+        document.getElementById('upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading"></span> 提交中...';
+            
+            hideMessages();
+            
+            try {
+                let imagePath = null;
+                
+                // 如果有图片，先上传图片
+                if (selectedImage) {
+                    const formData = new FormData();
+                    formData.append('image', selectedImage);
+                    
+                    const uploadRes = await fetch(`${API_URL}/upload`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        body: formData
+                    });
+                    
+                    if (!uploadRes.ok) {
+                        throw new Error('图片上传失败');
+                    }
+                    
+                    const uploadData = await uploadRes.json();
+                    imagePath = uploadData.imageUrl;
+                }
+                
+                // 提交记录
+                const recordData = {
+                    title: document.getElementById('title').value,
+                    content: document.getElementById('content').value,
+                    practice_date: document.getElementById('practice_date').value,
+                    location: document.getElementById('location').value,
+                    duration: document.getElementById('duration').value,
+                    image_path: imagePath
+                };
+                
+                const response = await fetch(`${API_URL}/student/records`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(recordData)
+                });
+                
+                if (response.ok) {
+                    showSuccess('记录提交成功！');
+                    document.getElementById('upload-form').reset();
+                    document.getElementById('image-preview').style.display = 'none';
+                    document.getElementById('upload-placeholder').style.display = 'block';
+                    document.getElementById('image-upload').classList.remove('has-image');
+                    selectedImage = null;
+                    document.getElementById('practice_date').valueAsDate = new Date();
+                    
+                    // 2秒后跳转到列表页
+                    setTimeout(() => {
+                        window.location.href = 'dashboard.html';
+                    }, 2000);
+                } else {
+                    const data = await response.json();
+                    throw new Error(data.error || '提交失败');
+                }
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '提交记录';
+            }
+        });
+        
+        function showError(message) {
+            const errorMsg = document.getElementById('error-message');
+            errorMsg.textContent = message;
+            errorMsg.classList.add('show');
+        }
+        
+        function showSuccess(message) {
+            const successMsg = document.getElementById('success-message');
+            successMsg.textContent = message;
+            successMsg.style.display = 'block';
+        }
+        
+        function hideMessages() {
+            document.getElementById('error-message').classList.remove('show');
+            document.getElementById('success-message').style.display = 'none';
+        }
+        
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '../login.html';
+        }
+    </script>
+</body>
+</html>

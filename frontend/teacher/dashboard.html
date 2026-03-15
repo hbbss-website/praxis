@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教师中心 - 社会实践管理</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>社会实践系统</h2>
+                <span class="role-badge teacher">老师</span>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <a href="dashboard.html" class="active">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                    记录管理
+                </a>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar" id="user-avatar">师</div>
+                    <div class="user-details">
+                        <div class="user-name" id="user-name">加载中...</div>
+                        <div class="user-role">老师</div>
+                    </div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="logout()" style="width: 100%;">
+                    退出登录
+                </button>
+            </div>
+        </aside>
+        
+        <!-- 主内容 -->
+        <main class="main-content">
+            <div class="page-header">
+                <h1>社会实践记录管理</h1>
+                <p>查看和审核学生的社会实践记录</p>
+            </div>
+            
+            <!-- 统计卡片 -->
+            <div class="stats-grid">
+                <div class="stat-card primary">
+                    <div class="stat-label">总记录数</div>
+                    <div class="stat-value" id="total-count">0</div>
+                </div>
+                <div class="stat-card warning">
+                    <div class="stat-label">待审核</div>
+                    <div class="stat-value" id="pending-count">0</div>
+                </div>
+                <div class="stat-card success">
+                    <div class="stat-label">已通过</div>
+                    <div class="stat-value" id="approved-count">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">学生人数</div>
+                    <div class="stat-value" id="student-count">0</div>
+                </div>
+            </div>
+            
+            <!-- 筛选器 -->
+            <div class="card">
+                <div class="filter-bar">
+                    <select id="filter-student" onchange="loadRecords()">
+                        <option value="">所有学生</option>
+                    </select>
+                    <select id="filter-status" onchange="loadRecords()">
+                        <option value="">所有状态</option>
+                        <option value="pending">待审核</option>
+                        <option value="approved">已通过</option>
+                        <option value="rejected">已驳回</option>
+                    </select>
+                    <button class="btn btn-primary btn-sm" onclick="loadRecords()">刷新</button>
+                </div>
+                
+                <!-- 记录表格 -->
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>学生</th>
+                                <th>标题</th>
+                                <th>实践日期</th>
+                                <th>时长</th>
+                                <th>状态</th>
+                                <th>提交时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="records-table">
+                            <tr>
+                                <td colspan="7" style="text-align: center; padding: 40px;">
+                                    加载中...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- 审核模态框 -->
+    <div class="modal-overlay" id="review-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">审核记录</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="modal-content">
+                    <!-- 动态内容 -->
+                </div>
+                <div class="form-group" style="margin-top: 20px;">
+                    <label for="review-comment">评语（可选）</label>
+                    <textarea id="review-comment" placeholder="输入评语..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+                <button class="btn btn-danger" onclick="submitReview('rejected')">驳回</button>
+                <button class="btn btn-success" onclick="submitReview('approved')">通过</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        let currentRecordId = null;
+        let students = [];
+        
+        // 检查登录状态
+        const token = localStorage.getItem('token');
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        
+        if (!token || user.role !== 'teacher') {
+            window.location.href = '../login.html';
+        }
+        
+        // 显示用户信息
+        document.getElementById('user-name').textContent = user.name || user.username;
+        document.getElementById('user-avatar').textContent = (user.name || user.username).charAt(0);
+        
+        // 加载数据
+        loadStudents();
+        loadRecords();
+        loadStatistics();
+        
+        async function loadStudents() {
+            try {
+                const response = await fetch(`${API_URL}/teacher/students`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!response.ok) throw new Error('加载失败');
+                
+                const data = await response.json();
+                students = data.students;
+                
+                const select = document.getElementById('filter-student');
+                select.innerHTML = '<option value="">所有学生</option>' + 
+                    students.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            } catch (error) {
+                console.error('加载学生列表失败:', error);
+            }
+        }
+        
+        async function loadRecords() {
+            const studentId = document.getElementById('filter-student').value;
+            const status = document.getElementById('filter-status').value;
+            
+            let url = `${API_URL}/teacher/records?`;
+            if (studentId) url += `student_id=${studentId}&`;
+            if (status) url += `status=${status}`;
+            
+            try {
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        logout();
+                        return;
+                    }
+                    throw new Error('加载失败');
+                }
+                
+                const data = await response.json();
+                displayRecords(data.records);
+            } catch (error) {
+                console.error('加载记录失败:', error);
+                document.getElementById('records-table').innerHTML = `
+                    <tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--danger);">
+                        加载失败，请重试
+                    </td></tr>
+                `;
+            }
+        }
+        
+        async function loadStatistics() {
+            try {
+                const response = await fetch(`${API_URL}/teacher/statistics`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!response.ok) throw new Error('加载失败');
+                
+                const data = await response.json();
+                document.getElementById('total-count').textContent = data.statistics.total_records;
+                document.getElementById('pending-count').textContent = data.statistics.pending_count;
+                document.getElementById('approved-count').textContent = data.statistics.approved_count;
+                document.getElementById('student-count').textContent = data.statistics.student_count;
+            } catch (error) {
+                console.error('加载统计失败:', error);
+            }
+        }
+        
+        function displayRecords(records) {
+            const tbody = document.getElementById('records-table');
+            
+            if (records.length === 0) {
+                tbody.innerHTML = `
+                    <tr><td colspan="7" style="text-align: center; padding: 40px;">
+                        <div class="empty-state" style="padding: 20px;">
+                            <p>暂无记录</p>
+                        </div>
+                    </td></tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = records.map(record => `
+                <tr>
+                    <td><strong>${escapeHtml(record.student_name)}</strong></td>
+                    <td>${escapeHtml(record.title)}</td>
+                    <td>${formatDate(record.practice_date)}</td>
+                    <td>${record.duration ? record.duration + '小时' : '-'}</td>
+                    <td><span class="status-badge status-${record.status}">
+                        ${record.status === 'pending' ? '待审核' : record.status === 'approved' ? '已通过' : '已驳回'}
+                    </span></td>
+                    <td>${formatDateTime(record.created_at)}</td>
+                    <td>
+                        <button class="btn btn-sm" onclick="openReviewModal(${record.id})" 
+                            style="background: var(--primary); color: white;">
+                            查看
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        async function openReviewModal(recordId) {
+            currentRecordId = recordId;
+            
+            try {
+                const response = await fetch(`${API_URL}/teacher/records`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                const record = data.records.find(r => r.id === recordId);
+                
+                if (!record) return;
+                
+                const modalContent = document.getElementById('modal-content');
+                modalContent.innerHTML = `
+                    <div style="margin-bottom: 16px;">
+                        <strong>学生：</strong>${escapeHtml(record.student_name)}
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <strong>标题：</strong>${escapeHtml(record.title)}
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <strong>实践日期：</strong>${formatDate(record.practice_date)}
+                        ${record.duration ? ` | <strong>时长：</strong>${record.duration}小时` : ''}
+                        ${record.location ? ` | <strong>地点：</strong>${escapeHtml(record.location)}` : ''}
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <strong>实践内容：</strong>
+                        <p style="margin-top: 8px; padding: 12px; background: var(--gray-100); border-radius: 8px;">
+                            ${escapeHtml(record.content)}
+                        </p>
+                    </div>
+                    ${record.image_path ? `
+                        <div>
+                            <strong>实践照片：</strong>
+                            <img src="${API_URL.replace('/api', '')}${record.image_path}" 
+                                style="max-width: 100%; max-height: 300px; margin-top: 8px; border-radius: 8px;">
+                        </div>
+                    ` : ''}
+                    ${record.teacher_comment ? `
+                        <div style="margin-top: 16px; padding: 12px; background: #dbeafe; border-radius: 8px;">
+                            <strong>当前评语：</strong>${escapeHtml(record.teacher_comment)}
+                        </div>
+                    ` : ''}
+                `;
+                
+                document.getElementById('review-comment').value = record.teacher_comment || '';
+                document.getElementById('review-modal').classList.add('show');
+            } catch (error) {
+                console.error('加载记录详情失败:', error);
+            }
+        }
+        
+        function closeModal() {
+            document.getElementById('review-modal').classList.remove('show');
+            currentRecordId = null;
+        }
+        
+        async function submitReview(status) {
+            if (!currentRecordId) return;
+            
+            const comment = document.getElementById('review-comment').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/teacher/records/${currentRecordId}/review`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ status, comment })
+                });
+                
+                if (response.ok) {
+                    closeModal();
+                    loadRecords();
+                    loadStatistics();
+                } else {
+                    alert('审核失败，请重试');
+                }
+            } catch (error) {
+                console.error('审核失败:', error);
+                alert('审核失败，请重试');
+            }
+        }
+        
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '../login.html';
+        }
+        
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('zh-CN');
+        }
+        
+        function formatDateTime(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleString('zh-CN');
+        }
+    </script>
+</body>
+</html>
