@@ -1,0 +1,8 @@
+node_modules/
+backend/node_modules/
+
+backend/uploads/
+backend/database.json
+
+.DS_Store
+Thumbs.db
