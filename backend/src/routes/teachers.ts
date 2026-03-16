@@ -14,8 +14,8 @@ router.get('/records', authMiddleware, teacherOnly, (request, response) => {
 
     response.json({ records });
   } catch (error) {
-    console.error('Failed to load teacher records.', error);
-    response.status(500).json({ error: 'Failed to load records.' });
+    console.error('加载教师记录失败。', error);
+    response.status(500).json({ error: '加载记录失败。' });
   }
 });
 
@@ -24,14 +24,14 @@ router.get('/records/:id', authMiddleware, teacherOnly, (request, response) => {
     const record = database.getTeacherRecordById(Number(request.params.id));
 
     if (!record) {
-      response.status(404).json({ error: 'Record not found.' });
+      response.status(404).json({ error: '记录不存在。' });
       return;
     }
 
     response.json({ record });
   } catch (error) {
-    console.error('Failed to load record detail.', error);
-    response.status(500).json({ error: 'Failed to load record.' });
+    console.error('加载记录详情失败。', error);
+    response.status(500).json({ error: '加载记录详情失败。' });
   }
 });
 
@@ -40,8 +40,8 @@ router.get('/students', authMiddleware, teacherOnly, (_request, response) => {
     const students = database.getAllStudents();
     response.json({ students });
   } catch (error) {
-    console.error('Failed to load students.', error);
-    response.status(500).json({ error: 'Failed to load students.' });
+    console.error('加载学生列表失败。', error);
+    response.status(500).json({ error: '加载学生列表失败。' });
   }
 });
 
@@ -50,8 +50,8 @@ router.get('/students/:id/records', authMiddleware, teacherOnly, (request, respo
     const records = database.getRecordsByStudent(Number(request.params.id));
     response.json({ records });
   } catch (error) {
-    console.error('Failed to load student detail records.', error);
-    response.status(500).json({ error: 'Failed to load records.' });
+    console.error('加载学生详情记录失败。', error);
+    response.status(500).json({ error: '加载记录失败。' });
   }
 });
 
@@ -63,7 +63,7 @@ router.put('/records/:id/review', authMiddleware, teacherOnly, (request, respons
       : null;
 
   if (status !== 'approved' && status !== 'rejected') {
-    response.status(400).json({ error: 'status must be approved or rejected.' });
+    response.status(400).json({ error: '审核状态只能是通过或驳回。' });
     return;
   }
 
@@ -74,14 +74,14 @@ router.put('/records/:id/review', authMiddleware, teacherOnly, (request, respons
     });
 
     if (!updatedRecord) {
-      response.status(404).json({ error: 'Record not found.' });
+      response.status(404).json({ error: '记录不存在。' });
       return;
     }
 
-    response.json({ message: 'Review saved successfully.' });
+    response.json({ message: '审核结果保存成功。' });
   } catch (error) {
-    console.error('Failed to review record.', error);
-    response.status(500).json({ error: 'Failed to review record.' });
+    console.error('审核记录失败。', error);
+    response.status(500).json({ error: '审核记录失败。' });
   }
 });
 
@@ -89,8 +89,8 @@ router.get('/statistics', authMiddleware, teacherOnly, (_request, response) => {
   try {
     response.json({ statistics: database.getStatistics() });
   } catch (error) {
-    console.error('Failed to load statistics.', error);
-    response.status(500).json({ error: 'Failed to load statistics.' });
+    console.error('加载统计数据失败。', error);
+    response.status(500).json({ error: '加载统计数据失败。' });
   }
 });
 

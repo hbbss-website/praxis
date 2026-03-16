@@ -8,7 +8,7 @@ function read(relativePath: string): string {
   return fs.readFileSync(path.join(rootDir, relativePath), 'utf8');
 }
 
-test('frontend pages link the stylesheet and compiled module entrypoints', () => {
+test('前端页面正确引用样式文件和构建后的模块入口', () => {
   const pages = [
     {
       page: 'frontend/login.html',
@@ -39,7 +39,7 @@ test('frontend pages link the stylesheet and compiled module entrypoints', () =>
   }
 });
 
-test('frontend typescript entrypoints call the expected backend endpoints', () => {
+test('前端 TypeScript 入口调用了预期的后端接口', () => {
   const expectations: Array<{ file: string; snippets: string[] }> = [
     {
       file: 'frontend/ts/shared.ts',
@@ -77,7 +77,7 @@ test('frontend typescript entrypoints call the expected backend endpoints', () =
   }
 });
 
-test('frontend build output exists for each entrypoint', () => {
+test('前端每个入口都生成了构建产物', () => {
   const outputs = [
     'frontend/js/login.js',
     'frontend/js/student/dashboard.js',

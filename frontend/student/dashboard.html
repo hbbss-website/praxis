@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Center - Social Practice Records</title>
+    <title>学生中心 - 社会实践记录</title>
     <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
     <div class="app-container">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>Social Practice System</h2>
-                <span class="role-badge student">Student</span>
+                <h2>社会实践系统</h2>
+                <span class="role-badge student">学生</span>
             </div>
 
             <nav class="sidebar-nav">
@@ -19,13 +19,13 @@
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                     </svg>
-                    My Records
+                    我的记录
                 </a>
                 <a href="upload.html">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                     </svg>
-                    Upload Record
+                    上传记录
                 </a>
             </nav>
 
@@ -33,49 +33,49 @@
                 <div class="user-info">
                     <div class="user-avatar" id="user-avatar">S</div>
                     <div class="user-details">
-                        <div class="user-name" id="user-name">Loading...</div>
-                        <div class="user-role">Student</div>
+                        <div class="user-name" id="user-name">加载中...</div>
+                        <div class="user-role">学生</div>
                     </div>
                 </div>
                 <button class="btn btn-secondary btn-sm" id="logout-button" type="button" style="width: 100%;">
-                    Sign Out
+                    退出登录
                 </button>
             </div>
         </aside>
 
         <main class="main-content">
             <div class="page-header">
-                <h1>My Social Practice Records</h1>
-                <p>Review and manage the records you have submitted.</p>
+                <h1>我的社会实践记录</h1>
+                <p>查看和管理你已经提交的社会实践记录。</p>
             </div>
 
             <div class="stats-grid">
                 <div class="stat-card primary">
-                    <div class="stat-label">Total Records</div>
+                    <div class="stat-label">记录总数</div>
                     <div class="stat-value" id="total-count">0</div>
                 </div>
                 <div class="stat-card warning">
-                    <div class="stat-label">Pending</div>
+                    <div class="stat-label">待审核</div>
                     <div class="stat-value" id="pending-count">0</div>
                 </div>
                 <div class="stat-card success">
-                    <div class="stat-label">Approved</div>
+                    <div class="stat-label">已通过</div>
                     <div class="stat-value" id="approved-count">0</div>
                 </div>
             </div>
 
             <div class="card">
                 <div class="card-header">
-                    <h3 class="card-title">Record List</h3>
-                    <a href="upload.html" class="btn btn-primary btn-sm">+ New Record</a>
+                    <h3 class="card-title">记录列表</h3>
+                    <a href="upload.html" class="btn btn-primary btn-sm">+ 新建记录</a>
                 </div>
                 <div id="records-container">
                     <div class="empty-state">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
-                        <h3>No records yet</h3>
-                        <p>Use the upload page to submit your first social practice record.</p>
+                        <h3>暂无记录</h3>
+                        <p>前往上传页面提交你的第一条社会实践记录。</p>
                     </div>
                 </div>
             </div>

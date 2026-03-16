@@ -13,6 +13,7 @@ import studentRoutes from './routes/students';
 import teacherRoutes from './routes/teachers';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const frontendDir = path.join(currentDir, '..', '..', 'frontend');
 const uploadDir = path.join(currentDir, '..', 'uploads');
 const defaultPort = Number(process.env.PORT) || 3000;
 
@@ -43,7 +44,7 @@ const upload = multer({
       return;
     }
 
-    callback(new Error('Only image uploads are allowed.'));
+    callback(new Error('仅允许上传图片文件。'));
   }
 });
 
@@ -66,7 +67,7 @@ app.use(
         return;
       }
 
-      callback(new Error('Origin not allowed by CORS policy.'));
+      callback(new Error('当前来源不被 CORS 策略允许。'));
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     optionsSuccessStatus: 204
@@ -79,16 +80,22 @@ app.use('/api/auth', authRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/teacher', teacherRoutes);
 
+app.get('/', (_request, response) => {
+  response.sendFile(path.join(frontendDir, 'login.html'));
+});
+
+app.use(express.static(frontendDir));
+
 app.post('/api/upload', authMiddleware, upload.single('image'), (request, response) => {
   if (!request.file) {
-    response.status(400).json({ error: 'No file uploaded.' });
+    response.status(400).json({ error: '未检测到上传文件。' });
     return;
   }
 
   const imageUrl = `/uploads/${request.file.filename}`;
 
   response.json({
-    message: 'Upload successful.',
+    message: '上传成功。',
     imageUrl,
     filename: request.file.filename
   });
@@ -96,7 +103,7 @@ app.post('/api/upload', authMiddleware, upload.single('image'), (request, respon
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
   console.error(error);
-  response.status(500).json({ error: error.message || 'Internal server error.' });
+  response.status(500).json({ error: error.message || '服务器内部错误。' });
 };
 
 app.use(errorHandler);
@@ -105,7 +112,7 @@ export function startServer(port = defaultPort) {
   const server = app.listen(port, () => {
     const address = server.address();
     const resolvedPort = address && typeof address !== 'string' ? address.port : port;
-    console.log(`Server running at http://localhost:${resolvedPort}`);
+    console.log(`服务已启动：http://localhost:${resolvedPort}`);
   });
 
   return server;

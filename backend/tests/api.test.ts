@@ -53,13 +53,13 @@ function request(
   });
 }
 
-test('backend API supports login, student records, and teacher review flow', async () => {
+test('后端 API 支持登录、学生记录提交和教师审核流程', async () => {
   const server = startServer(0);
   await new Promise((resolve) => server.once('listening', resolve));
   const address = server.address();
 
   if (!address || typeof address === 'string') {
-    throw new Error('Failed to determine test server port.');
+    throw new Error('无法获取测试服务器端口。');
   }
 
   const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -99,10 +99,10 @@ test('backend API supports login, student records, and teacher review flow', asy
         Authorization: `Bearer ${studentLogin.body.token}`
       },
       body: JSON.stringify({
-        title: 'Community Cleanup',
-        content: 'Collected trash and sorted recyclables.',
+        title: '社区清洁活动',
+        content: '参与垃圾清理并完成垃圾分类。',
         practice_date: '2026-03-15',
-        location: 'Riverside Park',
+        location: '滨河公园',
         duration: 3
       })
     });
@@ -116,7 +116,7 @@ test('backend API supports login, student records, and teacher review flow', asy
 
     expect(studentRecords.status).toBe(200);
     expect(studentRecords.body.records.length).toBe(1);
-    expect(studentRecords.body.records[0].title).toBe('Community Cleanup');
+    expect(studentRecords.body.records[0].title).toBe('社区清洁活动');
     expect(studentRecords.body.records[0].status).toBe('pending');
 
     const teacherRecords = await request(baseUrl, '/api/teacher/records', {
@@ -144,7 +144,7 @@ test('backend API supports login, student records, and teacher review flow', asy
         'Content-Type': 'application/json',
         Authorization: `Bearer ${teacherLogin.body.token}`
       },
-      body: JSON.stringify({ status: 'approved', comment: 'Well documented.' })
+      body: JSON.stringify({ status: 'approved', comment: '记录完整，内容清晰。' })
     });
 
     expect(review.status).toBe(200);
@@ -167,13 +167,13 @@ test('backend API supports login, student records, and teacher review flow', asy
   }
 });
 
-test('backend login is rate limited after repeated failures', async () => {
+test('后端在多次登录失败后会触发限流', async () => {
   const server = startServer(0);
   await new Promise((resolve) => server.once('listening', resolve));
   const address = server.address();
 
   if (!address || typeof address === 'string') {
-    throw new Error('Failed to determine test server port.');
+    throw new Error('无法获取测试服务器端口。');
   }
 
   const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -196,7 +196,7 @@ test('backend login is rate limited after repeated failures', async () => {
     });
 
     expect(lockedLogin.status).toBe(429);
-    expect(lockedLogin.body.error).toMatch(/Too many login attempts/);
+    expect(lockedLogin.body.error).toMatch(/登录失败次数过多/);
   } finally {
     await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve(undefined)));

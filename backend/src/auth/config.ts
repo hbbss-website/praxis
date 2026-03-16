@@ -1,3 +1,5 @@
+import type { SignOptions } from 'jsonwebtoken';
+
 const DEFAULT_JWT_SECRET = 'development-only-jwt-secret-change-me';
 const DEFAULT_JWT_AUDIENCE = 'social-practice-users';
 const DEFAULT_JWT_ISSUER = 'social-practice-system';
@@ -18,7 +20,7 @@ export const loginLockoutMs = parsePositiveInteger(process.env.LOGIN_LOCKOUT_MS,
 
 if (process.env.JWT_SECRET === undefined) {
   const warningMessage =
-    'JWT_SECRET is not set. Using a development fallback secret. Configure JWT_SECRET before deployment.';
+    '未设置 JWT_SECRET，当前使用开发环境回退密钥。部署前请务必配置 JWT_SECRET。';
 
   if (isProduction) {
     throw new Error(warningMessage);
@@ -28,7 +30,7 @@ if (process.env.JWT_SECRET === undefined) {
 }
 
 if (jwtSecret.length < 32) {
-  const warningMessage = 'JWT_SECRET should be at least 32 characters long.';
+  const warningMessage = 'JWT_SECRET 长度至少应为 32 个字符。';
 
   if (isProduction) {
     throw new Error(warningMessage);
@@ -36,4 +38,3 @@ if (jwtSecret.length < 32) {
 
   console.warn(warningMessage);
 }
-import type { SignOptions } from 'jsonwebtoken';

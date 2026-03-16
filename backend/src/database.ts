@@ -141,7 +141,7 @@ function loadData(): void {
     const raw = JSON.parse(fs.readFileSync(dbPath, 'utf8')) as unknown;
     db = sanitizeDatabaseState(raw);
   } catch (error) {
-    console.warn('Failed to parse database file. Starting with a fresh data store.', error);
+    console.warn('数据库文件解析失败，将使用新的数据存储。', error);
     db = createEmptyState();
   }
 }
@@ -160,7 +160,7 @@ function initDefaultData(): void {
       username: 'teacher1',
       password: hashedPassword,
       role: 'teacher',
-      name: 'Teacher One',
+      name: '教师一',
       created_at: createdAt
     },
     {
@@ -168,7 +168,7 @@ function initDefaultData(): void {
       username: 'student1',
       password: hashedPassword,
       role: 'student',
-      name: 'Student One',
+      name: '学生一',
       created_at: createdAt
     },
     {
@@ -176,7 +176,7 @@ function initDefaultData(): void {
       username: 'student2',
       password: hashedPassword,
       role: 'student',
-      name: 'Student Two',
+      name: '学生二',
       created_at: createdAt
     }
   );

@@ -28,7 +28,7 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   loginButton.disabled = true;
-  loginButton.innerHTML = '<span class="loading"></span> Signing in...';
+  loginButton.innerHTML = '<span class="loading"></span> 登录中...';
   errorMessage.classList.remove('show');
 
   try {
@@ -50,13 +50,13 @@ form.addEventListener('submit', async (event) => {
       return;
     }
 
-    errorMessage.textContent = data?.error ?? 'Unable to sign in.';
+    errorMessage.textContent = data?.error ?? '登录失败。';
     errorMessage.classList.add('show');
   } catch {
-    errorMessage.textContent = 'Unable to reach the backend service.';
+    errorMessage.textContent = '无法连接到后端服务。';
     errorMessage.classList.add('show');
   } finally {
     loginButton.disabled = false;
-    loginButton.textContent = 'Sign In';
+    loginButton.textContent = '登录';
   }
 });

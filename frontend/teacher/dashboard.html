@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teacher Center - Social Practice Management</title>
+    <title>教师中心 - 社会实践管理</title>
     <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
     <div class="app-container">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>Social Practice System</h2>
-                <span class="role-badge teacher">Teacher</span>
+                <h2>社会实践系统</h2>
+                <span class="role-badge teacher">教师</span>
             </div>
 
             <nav class="sidebar-nav">
@@ -19,7 +19,7 @@
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                     </svg>
-                    Record Management
+                    记录管理
                 </a>
             </nav>
 
@@ -27,37 +27,37 @@
                 <div class="user-info">
                     <div class="user-avatar" id="user-avatar">T</div>
                     <div class="user-details">
-                        <div class="user-name" id="user-name">Loading...</div>
-                        <div class="user-role">Teacher</div>
+                        <div class="user-name" id="user-name">加载中...</div>
+                        <div class="user-role">教师</div>
                     </div>
                 </div>
                 <button class="btn btn-secondary btn-sm" id="logout-button" type="button" style="width: 100%;">
-                    Sign Out
+                    退出登录
                 </button>
             </div>
         </aside>
 
         <main class="main-content">
             <div class="page-header">
-                <h1>Social Practice Record Management</h1>
-                <p>Review submitted student records and record approval decisions.</p>
+                <h1>社会实践记录管理</h1>
+                <p>查看学生提交的实践记录，并完成审核处理。</p>
             </div>
 
             <div class="stats-grid">
                 <div class="stat-card primary">
-                    <div class="stat-label">Total Records</div>
+                    <div class="stat-label">记录总数</div>
                     <div class="stat-value" id="total-count">0</div>
                 </div>
                 <div class="stat-card warning">
-                    <div class="stat-label">Pending</div>
+                    <div class="stat-label">待审核</div>
                     <div class="stat-value" id="pending-count">0</div>
                 </div>
                 <div class="stat-card success">
-                    <div class="stat-label">Approved</div>
+                    <div class="stat-label">已通过</div>
                     <div class="stat-value" id="approved-count">0</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Students</div>
+                    <div class="stat-label">学生人数</div>
                     <div class="stat-value" id="student-count">0</div>
                 </div>
             </div>
@@ -65,34 +65,34 @@
             <div class="card">
                 <div class="filter-bar">
                     <select id="filter-student">
-                        <option value="">All students</option>
+                        <option value="">全部学生</option>
                     </select>
                     <select id="filter-status">
-                        <option value="">All statuses</option>
-                        <option value="pending">Pending</option>
-                        <option value="approved">Approved</option>
-                        <option value="rejected">Rejected</option>
+                        <option value="">全部状态</option>
+                        <option value="pending">待审核</option>
+                        <option value="approved">已通过</option>
+                        <option value="rejected">已驳回</option>
                     </select>
-                    <button class="btn btn-primary btn-sm" id="refresh-records-button" type="button">Refresh</button>
+                    <button class="btn btn-primary btn-sm" id="refresh-records-button" type="button">刷新</button>
                 </div>
 
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
-                                <th>Student</th>
-                                <th>Title</th>
-                                <th>Practice Date</th>
-                                <th>Duration</th>
-                                <th>Status</th>
-                                <th>Submitted At</th>
-                                <th>Action</th>
+                                <th>学生</th>
+                                <th>标题</th>
+                                <th>实践日期</th>
+                                <th>时长</th>
+                                <th>状态</th>
+                                <th>提交时间</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="records-table">
                             <tr>
                                 <td colspan="7" style="text-align: center; padding: 40px;">
-                                    Loading...
+                                    加载中...
                                 </td>
                             </tr>
                         </tbody>
@@ -105,20 +105,20 @@
     <div class="modal-overlay" id="review-modal">
         <div class="modal">
             <div class="modal-header">
-                <h3 class="modal-title">Review Record</h3>
+                <h3 class="modal-title">审核记录</h3>
                 <button class="modal-close" id="close-review-modal" type="button">&times;</button>
             </div>
             <div class="modal-body">
                 <div id="modal-content"></div>
                 <div class="form-group" style="margin-top: 20px;">
-                    <label for="review-comment">Comment (optional)</label>
-                    <textarea id="review-comment" placeholder="Add a review comment..."></textarea>
+                    <label for="review-comment">评语（可选）</label>
+                    <textarea id="review-comment" placeholder="请输入审核评语..."></textarea>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="cancel-review-button" type="button">Cancel</button>
-                <button class="btn btn-danger" id="reject-review-button" type="button">Reject</button>
-                <button class="btn btn-success" id="approve-review-button" type="button">Approve</button>
+                <button class="btn btn-secondary" id="cancel-review-button" type="button">取消</button>
+                <button class="btn btn-danger" id="reject-review-button" type="button">驳回</button>
+                <button class="btn btn-success" id="approve-review-button" type="button">通过</button>
             </div>
         </div>
     </div>

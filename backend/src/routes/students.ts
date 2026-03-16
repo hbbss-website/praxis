@@ -38,8 +38,8 @@ router.get('/records', authMiddleware, studentOnly, (request, response) => {
     const records = database.getRecordsByStudent(request.user!.id);
     response.json({ records });
   } catch (error) {
-    console.error('Failed to load student records.', error);
-    response.status(500).json({ error: 'Failed to load records.' });
+    console.error('加载学生记录失败。', error);
+    response.status(500).json({ error: '加载记录失败。' });
   }
 });
 
@@ -49,7 +49,7 @@ router.post('/records', authMiddleware, studentOnly, (request, response) => {
   const practiceDate = asRequiredString(request.body.practice_date);
 
   if (!title || !content || !practiceDate) {
-    response.status(400).json({ error: 'title, content, and practice_date are required.' });
+    response.status(400).json({ error: '标题、内容和实践日期不能为空。' });
     return;
   }
 
@@ -65,12 +65,12 @@ router.post('/records', authMiddleware, studentOnly, (request, response) => {
     });
 
     response.json({
-      message: 'Record created successfully.',
+      message: '记录创建成功。',
       recordId: record.id
     });
   } catch (error) {
-    console.error('Failed to create student record.', error);
-    response.status(500).json({ error: 'Failed to create record.' });
+    console.error('创建学生记录失败。', error);
+    response.status(500).json({ error: '创建记录失败。' });
   }
 });
 
@@ -78,7 +78,7 @@ router.put('/records/:id', authMiddleware, studentOnly, (request, response) => {
   const existingRecord = database.getRecordById(Number(request.params.id));
 
   if (!existingRecord || existingRecord.student_id !== request.user!.id) {
-    response.status(404).json({ error: 'Record not found.' });
+    response.status(404).json({ error: '记录不存在。' });
     return;
   }
 
@@ -89,7 +89,7 @@ router.put('/records/:id', authMiddleware, studentOnly, (request, response) => {
 
   if (request.body.title !== undefined) {
     if (!title) {
-      response.status(400).json({ error: 'title cannot be empty.' });
+      response.status(400).json({ error: '标题不能为空。' });
       return;
     }
 
@@ -98,7 +98,7 @@ router.put('/records/:id', authMiddleware, studentOnly, (request, response) => {
 
   if (request.body.content !== undefined) {
     if (!content) {
-      response.status(400).json({ error: 'content cannot be empty.' });
+      response.status(400).json({ error: '内容不能为空。' });
       return;
     }
 
@@ -107,7 +107,7 @@ router.put('/records/:id', authMiddleware, studentOnly, (request, response) => {
 
   if (request.body.practice_date !== undefined) {
     if (!practiceDate) {
-      response.status(400).json({ error: 'practice_date cannot be empty.' });
+      response.status(400).json({ error: '实践日期不能为空。' });
       return;
     }
 
@@ -128,10 +128,10 @@ router.put('/records/:id', authMiddleware, studentOnly, (request, response) => {
 
   try {
     database.updateRecord(existingRecord.id, updates);
-    response.json({ message: 'Record updated successfully.' });
+    response.json({ message: '记录更新成功。' });
   } catch (error) {
-    console.error('Failed to update student record.', error);
-    response.status(500).json({ error: 'Failed to update record.' });
+    console.error('更新学生记录失败。', error);
+    response.status(500).json({ error: '更新记录失败。' });
   }
 });
 
@@ -139,16 +139,16 @@ router.delete('/records/:id', authMiddleware, studentOnly, (request, response) =
   const existingRecord = database.getRecordById(Number(request.params.id));
 
   if (!existingRecord || existingRecord.student_id !== request.user!.id) {
-    response.status(404).json({ error: 'Record not found.' });
+    response.status(404).json({ error: '记录不存在。' });
     return;
   }
 
   try {
     database.deleteRecord(existingRecord.id);
-    response.json({ message: 'Record deleted successfully.' });
+    response.json({ message: '记录删除成功。' });
   } catch (error) {
-    console.error('Failed to delete student record.', error);
-    response.status(500).json({ error: 'Failed to delete record.' });
+    console.error('删除学生记录失败。', error);
+    response.status(500).json({ error: '删除记录失败。' });
   }
 });
 

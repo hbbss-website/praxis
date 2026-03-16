@@ -108,7 +108,7 @@ if (session) {
       return;
     }
     const recordId = button.dataset.recordId;
-    window.alert(`Record ID: ${recordId ?? ""}`);
+    window.alert(`记录 ID：${recordId ?? ""}`);
   });
   loadRecords(session.token, recordsContainer, totalCount, pendingCount, approvedCount);
 }
@@ -123,16 +123,16 @@ async function loadRecords(token, recordsContainer, totalCount, pendingCount, ap
     }
     const data = await readJson(response);
     if (!response.ok || !data) {
-      throw new Error(data?.error ?? "Unable to load records.");
+      throw new Error(data?.error ?? "加载记录失败。");
     }
     renderRecords(recordsContainer, data.records);
     updateStats(data.records, totalCount, pendingCount, approvedCount);
   } catch (error) {
-    console.error("Failed to load student records.", error);
+    console.error("加载学生记录失败。", error);
     recordsContainer.innerHTML = `
       <div class="empty-state">
-        <h3>Unable to load records</h3>
-        <p>Please refresh the page and try again.</p>
+        <h3>加载记录失败</h3>
+        <p>请刷新页面后重试。</p>
       </div>
     `;
   }
@@ -145,8 +145,8 @@ function renderRecords(container, records) {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
         </svg>
-        <h3>No records yet</h3>
-        <p>Create your first social practice record from the upload page.</p>
+        <h3>暂无记录</h3>
+        <p>前往上传页面创建你的第一条社会实践记录。</p>
       </div>
     `;
     return;
@@ -163,9 +163,9 @@ function renderRecords(container, records) {
               <div class="record-content">
                 <h4 class="record-title">${escapeHtml(record.title)}</h4>
                 <div class="record-meta">
-                  <span>Date: ${formatDate(record.practice_date)}</span>
-                  ${record.location ? `<span>Location: ${escapeHtml(record.location)}</span>` : ""}
-                  ${record.duration ? `<span>Duration: ${record.duration} hours</span>` : ""}
+                  <span>日期：${formatDate(record.practice_date)}</span>
+                  ${record.location ? `<span>地点：${escapeHtml(record.location)}</span>` : ""}
+                  ${record.duration ? `<span>时长：${record.duration} 小时</span>` : ""}
                 </div>
                 <p class="record-description">${escapeHtml(record.content)}</p>
                 <div class="record-footer">
@@ -177,11 +177,11 @@ function renderRecords(container, records) {
                     style="background: var(--gray-100); color: var(--gray-800);"
                     type="button"
                   >
-                    Details
+                    详情
                   </button>
                 </div>
                 ${record.teacher_comment ? `<div style="margin-top: 12px; padding: 12px; background: #f3f4f6; border-radius: 8px; font-size: 13px;">
-                        <strong>Teacher comment:</strong> ${escapeHtml(record.teacher_comment)}
+                        <strong>教师评语：</strong>${escapeHtml(record.teacher_comment)}
                       </div>` : ""}
               </div>
             </div>
@@ -197,10 +197,10 @@ function updateStats(records, totalCount, pendingCount, approvedCount) {
 function statusLabel(status) {
   switch (status) {
     case "approved":
-      return "Approved";
+      return "已通过";
     case "rejected":
-      return "Rejected";
+      return "已驳回";
     default:
-      return "Pending";
+      return "待审核";
   }
 }

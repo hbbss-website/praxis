@@ -12,7 +12,7 @@ export const authMiddleware: RequestHandler = (request, response, next: NextFunc
   const authHeader = request.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    sendAuthError(response, 401, 'Authentication token is required.');
+    sendAuthError(response, 401, '缺少认证令牌。');
     return;
   }
 
@@ -25,21 +25,21 @@ export const authMiddleware: RequestHandler = (request, response, next: NextFunc
     });
 
     if (!decoded || typeof decoded === 'string') {
-      sendAuthError(response, 401, 'Authentication token is invalid.');
+      sendAuthError(response, 401, '认证令牌无效。');
       return;
     }
 
     request.user = decoded as AuthTokenPayload;
     next();
   } catch {
-    sendAuthError(response, 401, 'Authentication token is invalid or expired.');
+    sendAuthError(response, 401, '认证令牌无效或已过期。');
   }
 };
 
 function requireRole(role: UserRole): RequestHandler {
   return (request, response, next) => {
     if (request.user?.role !== role) {
-      sendAuthError(response, 403, `Only ${role}s can access this resource.`);
+      sendAuthError(response, 403, role === 'teacher' ? '只有教师可以访问该资源。' : '只有学生可以访问该资源。');
       return;
     }
 

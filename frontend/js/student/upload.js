@@ -127,7 +127,7 @@ if (session) {
       return;
     }
     if (selectedImage.size > 5 * 1024 * 1024) {
-      showError(errorMessage, successMessage, "Image size must be 5MB or less.");
+      showError(errorMessage, successMessage, "图片大小不能超过 5MB。");
       input.value = "";
       selectedImage = null;
       resetImagePreview(imagePreview, uploadPlaceholder, imageUpload);
@@ -146,7 +146,7 @@ if (session) {
     event.preventDefault();
     hideMessages(errorMessage, successMessage);
     submitButton.disabled = true;
-    submitButton.innerHTML = '<span class="loading"></span> Submitting...';
+    submitButton.innerHTML = '<span class="loading"></span> 提交中...';
     try {
       let imagePath = null;
       if (selectedImage) {
@@ -163,7 +163,7 @@ if (session) {
         }
         const uploadData = await readJson(uploadResponse);
         if (!uploadResponse.ok || !uploadData) {
-          throw new Error(uploadData?.error ?? "Image upload failed.");
+          throw new Error(uploadData?.error ?? "图片上传失败。");
         }
         imagePath = uploadData.imageUrl;
       }
@@ -188,9 +188,9 @@ if (session) {
       }
       const data = await readJson(response);
       if (!response.ok || !data) {
-        throw new Error(data?.error ?? "Unable to submit the record.");
+        throw new Error(data?.error ?? "提交记录失败。");
       }
-      showSuccess(errorMessage, successMessage, "Record submitted successfully.");
+      showSuccess(errorMessage, successMessage, "记录提交成功。");
       form.reset();
       resetImagePreview(imagePreview, uploadPlaceholder, imageUpload);
       imageInput.value = "";
@@ -200,11 +200,11 @@ if (session) {
         window.location.href = "dashboard.html";
       }, 2000);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to submit the record.";
+      const message = error instanceof Error ? error.message : "提交记录失败。";
       showError(errorMessage, successMessage, message);
     } finally {
       submitButton.disabled = false;
-      submitButton.textContent = "Submit Record";
+      submitButton.textContent = "提交记录";
     }
   });
 }

@@ -22,7 +22,7 @@ router.post('/login', async (request, response) => {
   const attemptKey = getLoginAttemptKey(ipAddress, username || 'unknown-user');
 
   if (!username || !password) {
-    response.status(400).json({ error: 'username and password are required.' });
+    response.status(400).json({ error: '用户名和密码不能为空。' });
     return;
   }
 
@@ -32,7 +32,7 @@ router.post('/login', async (request, response) => {
     if (remainingLockoutMs > 0) {
       response.setHeader('Cache-Control', 'no-store');
       response.status(429).json({
-        error: `Too many login attempts. Try again in ${Math.ceil(remainingLockoutMs / 1000)} seconds.`
+        error: `登录失败次数过多，请在 ${Math.ceil(remainingLockoutMs / 1000)} 秒后重试。`
       });
       return;
     }
@@ -43,7 +43,7 @@ router.post('/login', async (request, response) => {
       await bcrypt.compare(password, dummyPasswordHash);
       recordLoginFailure(attemptKey);
       response.setHeader('Cache-Control', 'no-store');
-      response.status(401).json({ error: 'Invalid username or password.' });
+      response.status(401).json({ error: '用户名或密码错误。' });
       return;
     }
 
@@ -52,7 +52,7 @@ router.post('/login', async (request, response) => {
     if (!isValidPassword) {
       recordLoginFailure(attemptKey);
       response.setHeader('Cache-Control', 'no-store');
-      response.status(401).json({ error: 'Invalid username or password.' });
+      response.status(401).json({ error: '用户名或密码错误。' });
       return;
     }
 
@@ -78,8 +78,8 @@ router.post('/login', async (request, response) => {
       user: authUser
     });
   } catch (error) {
-    console.error('Login failed.', error);
-    response.status(500).json({ error: 'Failed to complete login.' });
+    console.error('登录失败。', error);
+    response.status(500).json({ error: '登录处理失败。' });
   }
 });
 

@@ -170,29 +170,29 @@ if (session) {
       }
       const data = await readJson(response);
       if (!response.ok || !data) {
-        throw new Error(data?.error ?? "Unable to load record details.");
+        throw new Error(data?.error ?? "加载记录详情失败。");
       }
       const record = data.record;
       modalContent.innerHTML = `
         <div style="margin-bottom: 16px;">
-          <strong>Student:</strong> ${escapeHtml(record.student_name)}
+          <strong>学生：</strong>${escapeHtml(record.student_name)}
         </div>
         <div style="margin-bottom: 16px;">
-          <strong>Title:</strong> ${escapeHtml(record.title)}
+          <strong>标题：</strong>${escapeHtml(record.title)}
         </div>
         <div style="margin-bottom: 16px;">
-          <strong>Practice date:</strong> ${formatDate(record.practice_date, "-")}
-          ${record.duration ? ` | <strong>Duration:</strong> ${record.duration} hours` : ""}
-          ${record.location ? ` | <strong>Location:</strong> ${escapeHtml(record.location)}` : ""}
+          <strong>实践日期：</strong>${formatDate(record.practice_date, "-")}
+          ${record.duration ? ` | <strong>时长：</strong>${record.duration} 小时` : ""}
+          ${record.location ? ` | <strong>地点：</strong>${escapeHtml(record.location)}` : ""}
         </div>
         <div style="margin-bottom: 16px;">
-          <strong>Content:</strong>
+          <strong>内容：</strong>
           <p style="margin-top: 8px; padding: 12px; background: var(--gray-100); border-radius: 8px;">
             ${escapeHtml(record.content)}
           </p>
         </div>
         ${record.image_path ? `<div>
-                <strong>Image:</strong>
+                <strong>图片：</strong>
                 <img
                   src="${getApiOrigin()}${record.image_path}"
                   alt="${escapeHtml(record.title)}"
@@ -200,14 +200,14 @@ if (session) {
                 >
               </div>` : ""}
         ${record.teacher_comment ? `<div style="margin-top: 16px; padding: 12px; background: #dbeafe; border-radius: 8px;">
-                <strong>Current comment:</strong> ${escapeHtml(record.teacher_comment)}
+                <strong>当前评语：</strong>${escapeHtml(record.teacher_comment)}
               </div>` : ""}
       `;
       reviewComment.value = record.teacher_comment ?? "";
       reviewModal.classList.add("show");
     } catch (error) {
-      console.error("Failed to load record detail.", error);
-      window.alert("Unable to load record details.");
+      console.error("加载记录详情失败。", error);
+      window.alert("加载记录详情失败。");
     }
   }
   async function submitReview(status) {
@@ -232,7 +232,7 @@ if (session) {
       }
       const data = await readJson(response);
       if (!response.ok) {
-        throw new Error(data?.error ?? "Unable to save the review.");
+        throw new Error(data?.error ?? "保存审核结果失败。");
       }
       closeModal(reviewModal, reviewComment, () => {
         currentRecordId = null;
@@ -240,8 +240,8 @@ if (session) {
       await loadRecords(activeSession.token, studentFilter, statusFilter, recordsTable);
       await loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount);
     } catch (error) {
-      console.error("Failed to submit review.", error);
-      window.alert(error instanceof Error ? error.message : "Unable to save the review.");
+      console.error("提交审核失败。", error);
+      window.alert(error instanceof Error ? error.message : "保存审核结果失败。");
     }
   }
 }
@@ -256,14 +256,14 @@ async function loadStudents(token, studentFilter) {
     }
     const data = await readJson(response);
     if (!response.ok || !data) {
-      throw new Error(data?.error ?? "Unable to load students.");
+      throw new Error(data?.error ?? "加载学生列表失败。");
     }
     studentFilter.innerHTML = `
-      <option value="">All students</option>
+      <option value="">全部学生</option>
       ${data.students.map((student) => `<option value="${student.id}">${escapeHtml(student.name)}</option>`).join("")}
     `;
   } catch (error) {
-    console.error("Failed to load students.", error);
+    console.error("加载学生列表失败。", error);
   }
 }
 async function loadRecords(token, studentFilter, statusFilter, recordsTable) {
@@ -285,15 +285,15 @@ async function loadRecords(token, studentFilter, statusFilter, recordsTable) {
     }
     const data = await readJson(response);
     if (!response.ok || !data) {
-      throw new Error(data?.error ?? "Unable to load records.");
+      throw new Error(data?.error ?? "加载记录失败。");
     }
     renderRecords(recordsTable, data.records);
   } catch (error) {
-    console.error("Failed to load records.", error);
+    console.error("加载记录失败。", error);
     recordsTable.innerHTML = `
       <tr>
         <td colspan="7" style="text-align: center; padding: 40px; color: var(--danger);">
-          Unable to load records.
+          加载记录失败。
         </td>
       </tr>
     `;
@@ -310,14 +310,14 @@ async function loadStatistics(token, totalCount, pendingCount, approvedCount, st
     }
     const data = await readJson(response);
     if (!response.ok || !data) {
-      throw new Error(data?.error ?? "Unable to load statistics.");
+      throw new Error(data?.error ?? "加载统计数据失败。");
     }
     totalCount.textContent = String(data.statistics.total_records);
     pendingCount.textContent = String(data.statistics.pending_count);
     approvedCount.textContent = String(data.statistics.approved_count);
     studentCount.textContent = String(data.statistics.student_count);
   } catch (error) {
-    console.error("Failed to load statistics.", error);
+    console.error("加载统计数据失败。", error);
   }
 }
 function renderRecords(recordsTable, records) {
@@ -326,7 +326,7 @@ function renderRecords(recordsTable, records) {
       <tr>
         <td colspan="7" style="text-align: center; padding: 40px;">
           <div class="empty-state" style="padding: 20px;">
-            <p>No records found.</p>
+            <p>暂无记录</p>
           </div>
         </td>
       </tr>
@@ -338,7 +338,7 @@ function renderRecords(recordsTable, records) {
           <td><strong>${escapeHtml(record.student_name)}</strong></td>
           <td>${escapeHtml(record.title)}</td>
           <td>${formatDate(record.practice_date, "-")}</td>
-          <td>${record.duration ? `${record.duration} hours` : "-"}</td>
+          <td>${record.duration ? `${record.duration} 小时` : "-"}</td>
           <td>
             <span class="status-badge status-${record.status}">
               ${statusLabel(record.status)}
@@ -353,7 +353,7 @@ function renderRecords(recordsTable, records) {
               data-record-id="${record.id}"
               style="background: var(--primary); color: white;"
             >
-              Review
+              审核
             </button>
           </td>
         </tr>
@@ -367,10 +367,10 @@ function closeModal(reviewModal, reviewComment, onClose) {
 function statusLabel(status) {
   switch (status) {
     case "approved":
-      return "Approved";
+      return "已通过";
     case "rejected":
-      return "Rejected";
+      return "已驳回";
     default:
-      return "Pending";
+      return "待审核";
   }
 }

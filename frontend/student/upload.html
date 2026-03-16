@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Upload Record - Social Practice Records</title>
+    <title>上传记录 - 社会实践记录</title>
     <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
     <div class="app-container">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>Social Practice System</h2>
-                <span class="role-badge student">Student</span>
+                <h2>社会实践系统</h2>
+                <span class="role-badge student">学生</span>
             </div>
 
             <nav class="sidebar-nav">
@@ -19,13 +19,13 @@
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                     </svg>
-                    My Records
+                    我的记录
                 </a>
                 <a href="upload.html" class="active">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                     </svg>
-                    Upload Record
+                    上传记录
                 </a>
             </nav>
 
@@ -33,20 +33,20 @@
                 <div class="user-info">
                     <div class="user-avatar" id="user-avatar">S</div>
                     <div class="user-details">
-                        <div class="user-name" id="user-name">Loading...</div>
-                        <div class="user-role">Student</div>
+                        <div class="user-name" id="user-name">加载中...</div>
+                        <div class="user-role">学生</div>
                     </div>
                 </div>
                 <button class="btn btn-secondary btn-sm" id="logout-button" type="button" style="width: 100%;">
-                    Sign Out
+                    退出登录
                 </button>
             </div>
         </aside>
 
         <main class="main-content">
             <div class="page-header">
-                <h1>Upload Social Practice Record</h1>
-                <p>Fill in the details below and optionally attach a supporting image.</p>
+                <h1>上传社会实践记录</h1>
+                <p>填写下方信息，并可选上传一张相关图片。</p>
             </div>
 
             <div class="card" style="max-width: 800px;">
@@ -59,51 +59,51 @@
 
                 <form id="upload-form">
                     <div class="form-group">
-                        <label for="title">Practice Title *</label>
-                        <input type="text" id="title" name="title" placeholder="For example: Community volunteer service" required>
+                        <label for="title">实践标题 *</label>
+                        <input type="text" id="title" name="title" placeholder="例如：社区志愿服务" required>
                     </div>
 
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                         <div class="form-group">
-                            <label for="practice_date">Practice Date *</label>
+                            <label for="practice_date">实践日期 *</label>
                             <input type="date" id="practice_date" name="practice_date" required>
                         </div>
 
                         <div class="form-group">
-                            <label for="duration">Duration (hours)</label>
-                            <input type="number" id="duration" name="duration" placeholder="For example: 2.5" min="0.5" step="0.5">
+                            <label for="duration">时长（小时）</label>
+                            <input type="number" id="duration" name="duration" placeholder="例如：2.5" min="0.5" step="0.5">
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label for="location">Location</label>
-                        <input type="text" id="location" name="location" placeholder="For example: Community service center">
+                        <label for="location">地点</label>
+                        <input type="text" id="location" name="location" placeholder="例如：社区服务中心">
                     </div>
 
                     <div class="form-group">
-                        <label for="content">Practice Summary *</label>
-                        <textarea id="content" name="content" placeholder="Describe what you did, what you learned, and the outcome..." required></textarea>
+                        <label for="content">实践内容 *</label>
+                        <textarea id="content" name="content" placeholder="描述你做了什么、有哪些收获、最后结果如何..." required></textarea>
                     </div>
 
                     <div class="form-group">
-                        <label>Practice Photo</label>
+                        <label>实践照片</label>
                         <div class="image-upload" id="image-upload" role="button" tabindex="0">
                             <input type="file" id="image-input" accept="image/*" style="display: none;">
                             <div id="upload-placeholder">
                                 <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-bottom: 12px; opacity: 0.5;">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                 </svg>
-                                <p style="color: var(--gray-600);">Click to choose an image</p>
-                                <p style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">JPG, PNG, or GIF up to 5MB</p>
+                                <p style="color: var(--gray-600);">点击选择图片</p>
+                                <p style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">支持 JPG、PNG、GIF，大小不超过 5MB</p>
                             </div>
-                            <img id="image-preview" style="display: none;" alt="Preview">
+                            <img id="image-preview" style="display: none;" alt="预览图">
                         </div>
                     </div>
 
                     <div style="display: flex; gap: 12px; margin-top: 24px;">
-                        <a href="dashboard.html" class="btn btn-secondary" style="flex: 1;">Cancel</a>
+                        <a href="dashboard.html" class="btn btn-secondary" style="flex: 1;">取消</a>
                         <button type="submit" class="btn btn-primary" id="submit-btn" style="flex: 1;">
-                            Submit Record
+                            提交记录
                         </button>
                     </div>
                 </form>
