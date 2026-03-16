@@ -12,7 +12,7 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": ["node", "bun-types"]
   },
   "include": [
     "backend/src/**/*.ts",

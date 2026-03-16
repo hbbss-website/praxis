@@ -1,7 +1,6 @@
-import assert from 'node:assert/strict';
+import { expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import test from 'node:test';
 
 const rootDir = process.cwd();
 
@@ -35,11 +34,8 @@ test('frontend pages link the stylesheet and compiled module entrypoints', () =>
 
   for (const entry of pages) {
     const html = read(entry.page);
-    assert.match(html, new RegExp(`<link rel="stylesheet" href="${escapeForRegExp(entry.stylesheet)}">`));
-    assert.match(
-      html,
-      new RegExp(`<script type="module" src="${escapeForRegExp(entry.script)}"></script>`)
-    );
+    expect(html).toMatch(new RegExp(`<link rel="stylesheet" href="${escapeForRegExp(entry.stylesheet)}">`));
+    expect(html).toMatch(new RegExp(`<script type="module" src="${escapeForRegExp(entry.script)}"></script>`));
   }
 });
 
@@ -76,7 +72,7 @@ test('frontend typescript entrypoints call the expected backend endpoints', () =
     const source = read(expectation.file);
 
     for (const snippet of expectation.snippets) {
-      assert.ok(source.includes(snippet), `${expectation.file} should include ${snippet}`);
+      expect(source.includes(snippet), `${expectation.file} should include ${snippet}`).toBe(true);
     }
   }
 });
@@ -91,8 +87,8 @@ test('frontend build output exists for each entrypoint', () => {
 
   for (const output of outputs) {
     const filePath = path.join(rootDir, output);
-    assert.ok(fs.existsSync(filePath), `${output} should exist after build`);
-    assert.ok(read(output).length > 0, `${output} should not be empty`);
+    expect(fs.existsSync(filePath), `${output} should exist after build`).toBe(true);
+    expect(read(output).length > 0, `${output} should not be empty`).toBe(true);
   }
 });
 

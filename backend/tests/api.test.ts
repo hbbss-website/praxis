@@ -1,9 +1,8 @@
-import assert from 'node:assert/strict';
+import { expect, test } from 'bun:test';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hzw-backend-tests-'));
 process.env.DATABASE_FILE = path.join(tempDir, 'database.json');
@@ -72,9 +71,9 @@ test('backend API supports login, student records, and teacher review flow', asy
       body: JSON.stringify({ username: 'student1', password: '123456' })
     });
 
-    assert.equal(studentLogin.status, 200);
-    assert.equal(studentLogin.body.user.role, 'student');
-    assert.ok(studentLogin.body.token);
+    expect(studentLogin.status).toBe(200);
+    expect(studentLogin.body.user.role).toBe('student');
+    expect(studentLogin.body.token).toBeTruthy();
 
     const teacherLogin = await request(baseUrl, '/api/auth/login', {
       method: 'POST',
@@ -82,16 +81,16 @@ test('backend API supports login, student records, and teacher review flow', asy
       body: JSON.stringify({ username: 'teacher1', password: '123456' })
     });
 
-    assert.equal(teacherLogin.status, 200);
-    assert.equal(teacherLogin.body.user.role, 'teacher');
-    assert.ok(teacherLogin.body.token);
+    expect(teacherLogin.status).toBe(200);
+    expect(teacherLogin.body.user.role).toBe('teacher');
+    expect(teacherLogin.body.token).toBeTruthy();
 
     const me = await request(baseUrl, '/api/auth/me', {
       headers: { Authorization: `Bearer ${studentLogin.body.token}` }
     });
 
-    assert.equal(me.status, 200);
-    assert.equal(me.body.user.username, 'student1');
+    expect(me.status).toBe(200);
+    expect(me.body.user.username).toBe('student1');
 
     const createRecord = await request(baseUrl, '/api/student/records', {
       method: 'POST',
@@ -108,25 +107,25 @@ test('backend API supports login, student records, and teacher review flow', asy
       })
     });
 
-    assert.equal(createRecord.status, 200);
-    assert.ok(createRecord.body.recordId);
+    expect(createRecord.status).toBe(200);
+    expect(createRecord.body.recordId).toBeTruthy();
 
     const studentRecords = await request(baseUrl, '/api/student/records', {
       headers: { Authorization: `Bearer ${studentLogin.body.token}` }
     });
 
-    assert.equal(studentRecords.status, 200);
-    assert.equal(studentRecords.body.records.length, 1);
-    assert.equal(studentRecords.body.records[0].title, 'Community Cleanup');
-    assert.equal(studentRecords.body.records[0].status, 'pending');
+    expect(studentRecords.status).toBe(200);
+    expect(studentRecords.body.records.length).toBe(1);
+    expect(studentRecords.body.records[0].title).toBe('Community Cleanup');
+    expect(studentRecords.body.records[0].status).toBe('pending');
 
     const teacherRecords = await request(baseUrl, '/api/teacher/records', {
       headers: { Authorization: `Bearer ${teacherLogin.body.token}` }
     });
 
-    assert.equal(teacherRecords.status, 200);
-    assert.equal(teacherRecords.body.records.length, 1);
-    assert.equal(teacherRecords.body.records[0].student_username, 'student1');
+    expect(teacherRecords.status).toBe(200);
+    expect(teacherRecords.body.records.length).toBe(1);
+    expect(teacherRecords.body.records[0].student_username).toBe('student1');
 
     const teacherRecord = await request(
       baseUrl,
@@ -136,8 +135,8 @@ test('backend API supports login, student records, and teacher review flow', asy
       }
     );
 
-    assert.equal(teacherRecord.status, 200);
-    assert.equal(teacherRecord.body.record.id, createRecord.body.recordId);
+    expect(teacherRecord.status).toBe(200);
+    expect(teacherRecord.body.record.id).toBe(createRecord.body.recordId);
 
     const review = await request(baseUrl, `/api/teacher/records/${createRecord.body.recordId}/review`, {
       method: 'PUT',
@@ -148,16 +147,16 @@ test('backend API supports login, student records, and teacher review flow', asy
       body: JSON.stringify({ status: 'approved', comment: 'Well documented.' })
     });
 
-    assert.equal(review.status, 200);
+    expect(review.status).toBe(200);
 
     const statistics = await request(baseUrl, '/api/teacher/statistics', {
       headers: { Authorization: `Bearer ${teacherLogin.body.token}` }
     });
 
-    assert.equal(statistics.status, 200);
-    assert.equal(statistics.body.statistics.total_records, 1);
-    assert.equal(statistics.body.statistics.approved_count, 1);
-    assert.equal(statistics.body.statistics.student_count, 2);
+    expect(statistics.status).toBe(200);
+    expect(statistics.body.statistics.total_records).toBe(1);
+    expect(statistics.body.statistics.approved_count).toBe(1);
+    expect(statistics.body.statistics.student_count).toBe(2);
   } finally {
     await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve(undefined)));
@@ -187,7 +186,7 @@ test('backend login is rate limited after repeated failures', async () => {
         body: JSON.stringify({ username: 'security-check-user', password: 'wrong-password' })
       });
 
-      assert.equal(failedLogin.status, 401);
+      expect(failedLogin.status).toBe(401);
     }
 
     const lockedLogin = await request(baseUrl, '/api/auth/login', {
@@ -196,8 +195,8 @@ test('backend login is rate limited after repeated failures', async () => {
       body: JSON.stringify({ username: 'security-check-user', password: 'wrong-password' })
     });
 
-    assert.equal(lockedLogin.status, 429);
-    assert.match(lockedLogin.body.error, /Too many login attempts/);
+    expect(lockedLogin.status).toBe(429);
+    expect(lockedLogin.body.error).toMatch(/Too many login attempts/);
   } finally {
     await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve(undefined)));
