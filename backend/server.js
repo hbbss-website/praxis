@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -77,8 +78,4 @@ function startServer(port = PORT) {
   });
 }
 
-if (require.main === module) {
-  startServer();
-}
-
-module.exports = { app, startServer };
+startServer();

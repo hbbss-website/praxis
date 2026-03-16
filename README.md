@@ -37,8 +37,8 @@ social-practice-system/
 
 ```bash
 cd backend
-npm install
-npm start
+bun install
+bun start
 ```
 
 后端运行在 http://localhost:3000
