@@ -11,15 +11,11 @@ import type { AuthTokenPayload } from '../models';
 const router = Router();
 const dummyPasswordHash = bcrypt.hashSync('not-the-real-password', 10);
 
-function getLoginAttemptKey(ipAddress: string, username: string): string {
-  return `${ipAddress}:${username.toLowerCase()}`;
-}
-
 router.post('/login', async (request, response) => {
   const username = typeof request.body.username === 'string' ? request.body.username.trim() : '';
   const password = typeof request.body.password === 'string' ? request.body.password : '';
   const ipAddress = request.ip || request.socket.remoteAddress || 'unknown';
-  const attemptKey = getLoginAttemptKey(ipAddress, username || 'unknown-user');
+  const attemptKey = ipAddress;
 
   if (!username || !password) {
     response.status(400).json({ error: '用户名和密码不能为空。' });
