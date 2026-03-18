@@ -32,10 +32,6 @@ function getStoredUser() {
 function getToken() {
   return sessionStorage.getItem(tokenStorageKey);
 }
-function storeSession(token, user) {
-  sessionStorage.setItem(tokenStorageKey, token);
-  sessionStorage.setItem(userStorageKey, JSON.stringify(user));
-}
 function clearSession() {
   sessionStorage.removeItem(tokenStorageKey);
   sessionStorage.removeItem(userStorageKey);
@@ -43,9 +39,6 @@ function clearSession() {
 function logout(redirectPath) {
   clearSession();
   window.location.href = redirectPath;
-}
-function redirectByRole(role) {
-  window.location.href = role === "teacher" ? "teacher/dashboard.html" : "student/dashboard.html";
 }
 function requireRole(expectedRole, loginPath) {
   const token = getToken();
@@ -62,29 +55,6 @@ function populateUserSummary(nameSelector, avatarSelector, user) {
   const displayName = user.name || user.username;
   nameElement.textContent = displayName;
   avatarElement.textContent = displayName.charAt(0).toUpperCase();
-}
-function escapeHtml(value) {
-  if (!value) {
-    return "";
-  }
-  const element = document.createElement("div");
-  element.textContent = value;
-  return element.innerHTML;
-}
-function formatDate(value, fallback = "") {
-  if (!value) {
-    return fallback;
-  }
-  return new Date(value).toLocaleDateString("zh-CN");
-}
-function formatDateTime(value, fallback = "-") {
-  if (!value) {
-    return fallback;
-  }
-  return new Date(value).toLocaleString("zh-CN");
-}
-function getApiOrigin() {
-  return API_URL.replace(/\/api$/, "");
 }
 async function readJson(response) {
   const text = await response.text();
@@ -111,7 +81,13 @@ if (session) {
   let selectedImage = null;
   populateUserSummary("#user-name", "#user-avatar", session.user);
   logoutButton.addEventListener("click", () => logout("../login.html"));
+  const now = new Date;
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const today = `${yyyy}-${mm}-${dd}`;
   practiceDateInput.valueAsDate = new Date;
+  practiceDateInput.max = today;
   imageUpload.addEventListener("click", () => imageInput.click());
   imageUpload.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {

@@ -53,6 +53,11 @@ router.post('/records', authMiddleware, studentOnly, (request, response) => {
     return;
   }
 
+  if (Date.parse(practiceDate) > Date.now() + 14 * 60 * 60 * 1000) {
+    response.status(400).json({ error: '不能记录未来的活动。' });
+    return;
+  }
+
   try {
     const record = database.createRecord({
       student_id: request.user!.id,
