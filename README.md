@@ -8,62 +8,13 @@
 - 使用 `backend/database.json` 作为 JSON 文件数据存储
 - 前端为静态 HTML + CSS 页面
 
-## 项目结构
-
-```text
-.
-|-- backend/
-|   |-- database.json
-|   |-- src/
-|   |   |-- database.ts
-|   |   |-- middleware/
-|   |   |   `-- auth.ts
-|   |   |-- routes/
-|   |   |   |-- auth.ts
-|   |   |   |-- students.ts
-|   |   |   `-- teachers.ts
-|   |   `-- server.ts
-|   |-- tests/
-|   |   `-- api.test.ts
-|   `-- uploads/
-|-- frontend/
-|   |-- css/
-|   |   `-- style.css
-|   |-- js/              # 由 `bun run build:frontend` 生成
-|   |-- teacher/
-|   |   `-- dashboard.html
-|   |-- student/
-|   |   |-- dashboard.html
-|   |   `-- upload.html
-|   |-- ts/
-|   |   |-- login.ts
-|   |   |-- shared.ts
-|   |   |-- student/
-|   |   |   |-- dashboard.ts
-|   |   |   `-- upload.ts
-|   |   `-- teacher/
-|   |       `-- dashboard.ts
-|   |-- builder.ts
-|   `-- login.html
-|-- tests/
-|   `-- frontend.test.ts
-|-- package.json
-`-- tsconfig.json
-```
-
 ## 如何使用
 
-### 准备
+安装依赖：
 
-1. 安装依赖：
-
-    ```bash
-    bun install
-    ```
-
-1. 在 backend 新建 database.json，可以复制 database.template.json 的内容。如果你是开发者，注意不要改动 database.template.json。
-
-### 运行/开发
+```bash
+bun install
+```
 
 启动：
 
