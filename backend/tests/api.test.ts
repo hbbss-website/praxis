@@ -155,8 +155,14 @@ test('后端 API 支持登录、学生记录提交和教师审核流程', async 
 
     expect(statistics.status).toBe(200);
     expect(statistics.body.statistics.total_records).toBe(1);
+    expect(statistics.body.statistics.total_duration).toBe(3);
     expect(statistics.body.statistics.approved_count).toBe(1);
     expect(statistics.body.statistics.student_count).toBe(2);
+    expect(Array.isArray(statistics.body.statistics.student_durations)).toBe(true);
+    const student1Duration = statistics.body.statistics.student_durations.find(
+      (item: { student_username: string; total_duration: number }) => item.student_username === 'student1'
+    );
+    expect(student1Duration?.total_duration).toBe(3);
   } finally {
     await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve(undefined)));

@@ -350,6 +350,35 @@ body {
   color: var(--warning);
 }
 
+.stat-card.accent .stat-value {
+  color: var(--secondary);
+}
+
+.duration-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.duration-list .duration-item {
+  background: var(--gray-100);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.duration-list .duration-name {
+  color: var(--gray-800);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.duration-list .duration-value {
+  color: var(--secondary);
+  font-size: 18px;
+  font-weight: 700;
+}
+
 /* 表格 */
 .table-container {
   overflow-x: auto;

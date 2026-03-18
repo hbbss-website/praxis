@@ -97,6 +97,7 @@ if (session) {
   const logoutButton = requireElement("#logout-button");
   const recordsContainer = requireElement("#records-container");
   const totalCount = requireElement("#total-count");
+  const totalDuration = requireElement("#total-duration");
   const pendingCount = requireElement("#pending-count");
   const approvedCount = requireElement("#approved-count");
   populateUserSummary("#user-name", "#user-avatar", session.user);
@@ -110,9 +111,9 @@ if (session) {
     const recordId = button.dataset.recordId;
     window.alert(`记录 ID：${recordId ?? ""}`);
   });
-  loadRecords(session.token, recordsContainer, totalCount, pendingCount, approvedCount);
+  loadRecords(session.token, recordsContainer, totalCount, totalDuration, pendingCount, approvedCount);
 }
-async function loadRecords(token, recordsContainer, totalCount, pendingCount, approvedCount) {
+async function loadRecords(token, recordsContainer, totalCount, totalDuration, pendingCount, approvedCount) {
   try {
     const response = await fetch(`${API_URL}/student/records`, {
       headers: { Authorization: `Bearer ${token}` }
@@ -126,7 +127,7 @@ async function loadRecords(token, recordsContainer, totalCount, pendingCount, ap
       throw new Error(data?.error ?? "加载记录失败。");
     }
     renderRecords(recordsContainer, data.records);
-    updateStats(data.records, totalCount, pendingCount, approvedCount);
+    updateStats(data.records, totalCount, totalDuration, pendingCount, approvedCount);
   } catch (error) {
     console.error("加载学生记录失败。", error);
     recordsContainer.innerHTML = `
@@ -189,10 +190,14 @@ function renderRecords(container, records) {
     </div>
   `;
 }
-function updateStats(records, totalCount, pendingCount, approvedCount) {
+function updateStats(records, totalCount, totalDuration, pendingCount, approvedCount) {
   totalCount.textContent = String(records.length);
+  totalDuration.textContent = `${formatDuration(records.reduce((sum, record) => sum + (record.duration ?? 0), 0))} 小时`;
   pendingCount.textContent = String(records.filter((record) => record.status === "pending").length);
   approvedCount.textContent = String(records.filter((record) => record.status === "approved").length);
+}
+function formatDuration(duration) {
+  return Number.isInteger(duration) ? String(duration) : duration.toFixed(1);
 }
 function statusLabel(status) {
   switch (status) {

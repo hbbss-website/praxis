@@ -301,13 +301,48 @@ function getStatistics(): {
   rejected_count: number;
   student_count: number;
   total_records: number;
+  total_duration: number;
+  student_durations: Array<{
+    student_id: number;
+    student_name: string;
+    student_username: string;
+    total_duration: number;
+  }>;
 } {
+  const totalDuration = db.practice_records.reduce(
+    (sum, record) => sum + (typeof record.duration === 'number' ? record.duration : 0),
+    0
+  );
+  const studentDurations = db.users
+    .filter((user) => user.role === 'student')
+    .map((student) => ({
+      student_id: student.id,
+      student_name: student.name,
+      student_username: student.username,
+      total_duration: db.practice_records.reduce(
+        (sum, record) =>
+          record.student_id === student.id && typeof record.duration === 'number'
+            ? sum + record.duration
+            : sum,
+        0
+      )
+    }))
+    .sort((left, right) => {
+      if (right.total_duration === left.total_duration) {
+        return left.student_name.localeCompare(right.student_name);
+      }
+
+      return right.total_duration - left.total_duration;
+    });
+
   return {
     total_records: db.practice_records.length,
     pending_count: db.practice_records.filter((record) => record.status === 'pending').length,
     approved_count: db.practice_records.filter((record) => record.status === 'approved').length,
     rejected_count: db.practice_records.filter((record) => record.status === 'rejected').length,
-    student_count: db.users.filter((user) => user.role === 'student').length
+    student_count: db.users.filter((user) => user.role === 'student').length,
+    total_duration: totalDuration,
+    student_durations: studentDurations
   };
 }
 

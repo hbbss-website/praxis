@@ -52,6 +52,13 @@ interface StatisticsResponse extends ApiError {
     pending_count: number;
     student_count: number;
     total_records: number;
+    total_duration: number;
+    student_durations: Array<{
+      student_id: number;
+      student_name: string;
+      student_username: string;
+      total_duration: number;
+    }>;
   };
 }
 
@@ -68,6 +75,7 @@ if (session) {
   const pendingCount = requireElement<HTMLElement>('#pending-count');
   const approvedCount = requireElement<HTMLElement>('#approved-count');
   const studentCount = requireElement<HTMLElement>('#student-count');
+  const studentDurationList = requireElement<HTMLElement>('#student-duration-list');
   const reviewModal = requireElement<HTMLElement>('#review-modal');
   const modalContent = requireElement<HTMLElement>('#modal-content');
   const reviewComment = requireElement<HTMLTextAreaElement>('#review-comment');
@@ -88,7 +96,14 @@ if (session) {
   });
   refreshButton.addEventListener('click', () => {
     void loadRecords(activeSession.token, studentFilter, statusFilter, recordsTable);
-    void loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount);
+    void loadStatistics(
+      activeSession.token,
+      totalCount,
+      pendingCount,
+      approvedCount,
+      studentCount,
+      studentDurationList
+    );
   });
   closeModalButton.addEventListener('click', () => closeModal(reviewModal, reviewComment, () => {
     currentRecordId = null;
@@ -128,7 +143,14 @@ if (session) {
 
   void loadStudents(activeSession.token, studentFilter);
   void loadRecords(activeSession.token, studentFilter, statusFilter, recordsTable);
-  void loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount);
+  void loadStatistics(
+    activeSession.token,
+    totalCount,
+    pendingCount,
+    approvedCount,
+    studentCount,
+    studentDurationList
+  );
 
   async function openReviewModal(recordId: number): Promise<void> {
     currentRecordId = recordId;
@@ -231,7 +253,14 @@ if (session) {
         currentRecordId = null;
       });
       await loadRecords(activeSession.token, studentFilter, statusFilter, recordsTable);
-      await loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount);
+      await loadStatistics(
+        activeSession.token,
+        totalCount,
+        pendingCount,
+        approvedCount,
+        studentCount,
+        studentDurationList
+      );
     } catch (error) {
       console.error('提交审核失败。', error);
       window.alert(error instanceof Error ? error.message : '保存审核结果失败。');
@@ -318,7 +347,8 @@ async function loadStatistics(
   totalCount: HTMLElement,
   pendingCount: HTMLElement,
   approvedCount: HTMLElement,
-  studentCount: HTMLElement
+  studentCount: HTMLElement,
+  studentDurationList: HTMLElement
 ): Promise<void> {
   try {
     const response = await fetch(`${API_URL}/teacher/statistics`, {
@@ -340,9 +370,40 @@ async function loadStatistics(
     pendingCount.textContent = String(data.statistics.pending_count);
     approvedCount.textContent = String(data.statistics.approved_count);
     studentCount.textContent = String(data.statistics.student_count);
+    renderStudentDurations(studentDurationList, data.statistics.student_durations);
   } catch (error) {
     console.error('加载统计数据失败。', error);
   }
+}
+
+function formatDuration(duration: number): string {
+  return Number.isInteger(duration) ? String(duration) : duration.toFixed(1);
+}
+
+function renderStudentDurations(
+  container: HTMLElement,
+  studentDurations: Array<{
+    student_id: number;
+    student_name: string;
+    student_username: string;
+    total_duration: number;
+  }>
+): void {
+  if (studentDurations.length === 0) {
+    container.innerHTML = '<p style="color: var(--gray-600);">暂无学生数据</p>';
+    return;
+  }
+
+  container.innerHTML = studentDurations
+    .map(
+      (item) => `
+        <div class="duration-item">
+          <div class="duration-name">${escapeHtml(item.student_name)}（${escapeHtml(item.student_username)}）</div>
+          <div class="duration-value">${formatDuration(item.total_duration)} 小时</div>
+        </div>
+      `
+    )
+    .join('');
 }
 
 function renderRecords(recordsTable: HTMLElement, records: TeacherRecord[]): void {

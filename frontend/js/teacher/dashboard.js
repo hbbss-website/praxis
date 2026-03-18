@@ -104,6 +104,7 @@ if (session) {
   const pendingCount = requireElement("#pending-count");
   const approvedCount = requireElement("#approved-count");
   const studentCount = requireElement("#student-count");
+  const studentDurationList = requireElement("#student-duration-list");
   const reviewModal = requireElement("#review-modal");
   const modalContent = requireElement("#modal-content");
   const reviewComment = requireElement("#review-comment");
@@ -122,7 +123,7 @@ if (session) {
   });
   refreshButton.addEventListener("click", () => {
     loadRecords(activeSession.token, studentFilter, statusFilter, recordsTable);
-    loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount);
+    loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount, studentDurationList);
   });
   closeModalButton.addEventListener("click", () => closeModal(reviewModal, reviewComment, () => {
     currentRecordId = null;
@@ -157,7 +158,7 @@ if (session) {
   });
   loadStudents(activeSession.token, studentFilter);
   loadRecords(activeSession.token, studentFilter, statusFilter, recordsTable);
-  loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount);
+  loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount, studentDurationList);
   async function openReviewModal(recordId) {
     currentRecordId = recordId;
     try {
@@ -238,7 +239,7 @@ if (session) {
         currentRecordId = null;
       });
       await loadRecords(activeSession.token, studentFilter, statusFilter, recordsTable);
-      await loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount);
+      await loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount, studentDurationList);
     } catch (error) {
       console.error("提交审核失败。", error);
       window.alert(error instanceof Error ? error.message : "保存审核结果失败。");
@@ -299,7 +300,7 @@ async function loadRecords(token, studentFilter, statusFilter, recordsTable) {
     `;
   }
 }
-async function loadStatistics(token, totalCount, pendingCount, approvedCount, studentCount) {
+async function loadStatistics(token, totalCount, pendingCount, approvedCount, studentCount, studentDurationList) {
   try {
     const response = await fetch(`${API_URL}/teacher/statistics`, {
       headers: { Authorization: `Bearer ${token}` }
@@ -316,9 +317,25 @@ async function loadStatistics(token, totalCount, pendingCount, approvedCount, st
     pendingCount.textContent = String(data.statistics.pending_count);
     approvedCount.textContent = String(data.statistics.approved_count);
     studentCount.textContent = String(data.statistics.student_count);
+    renderStudentDurations(studentDurationList, data.statistics.student_durations);
   } catch (error) {
     console.error("加载统计数据失败。", error);
   }
+}
+function formatDuration(duration) {
+  return Number.isInteger(duration) ? String(duration) : duration.toFixed(1);
+}
+function renderStudentDurations(container, studentDurations) {
+  if (studentDurations.length === 0) {
+    container.innerHTML = '<p style="color: var(--gray-600);">暂无学生数据</p>';
+    return;
+  }
+  container.innerHTML = studentDurations.map((item) => `
+        <div class="duration-item">
+          <div class="duration-name">${escapeHtml(item.student_name)}（${escapeHtml(item.student_username)}）</div>
+          <div class="duration-value">${formatDuration(item.total_duration)} 小时</div>
+        </div>
+      `).join("");
 }
 function renderRecords(recordsTable, records) {
   if (records.length === 0) {

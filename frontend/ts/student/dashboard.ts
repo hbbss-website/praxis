@@ -35,6 +35,7 @@ if (session) {
   const logoutButton = requireElement<HTMLButtonElement>('#logout-button');
   const recordsContainer = requireElement<HTMLElement>('#records-container');
   const totalCount = requireElement<HTMLElement>('#total-count');
+  const totalDuration = requireElement<HTMLElement>('#total-duration');
   const pendingCount = requireElement<HTMLElement>('#pending-count');
   const approvedCount = requireElement<HTMLElement>('#approved-count');
 
@@ -53,13 +54,14 @@ if (session) {
     window.alert(`记录 ID：${recordId ?? ''}`);
   });
 
-  void loadRecords(session.token, recordsContainer, totalCount, pendingCount, approvedCount);
+  void loadRecords(session.token, recordsContainer, totalCount, totalDuration, pendingCount, approvedCount);
 }
 
 async function loadRecords(
   token: string,
   recordsContainer: HTMLElement,
   totalCount: HTMLElement,
+  totalDuration: HTMLElement,
   pendingCount: HTMLElement,
   approvedCount: HTMLElement
 ): Promise<void> {
@@ -80,7 +82,7 @@ async function loadRecords(
     }
 
     renderRecords(recordsContainer, data.records);
-    updateStats(data.records, totalCount, pendingCount, approvedCount);
+    updateStats(data.records, totalCount, totalDuration, pendingCount, approvedCount);
   } catch (error) {
     console.error('加载学生记录失败。', error);
     recordsContainer.innerHTML = `
@@ -163,12 +165,18 @@ function renderRecords(container: HTMLElement, records: StudentRecord[]): void {
 function updateStats(
   records: StudentRecord[],
   totalCount: HTMLElement,
+  totalDuration: HTMLElement,
   pendingCount: HTMLElement,
   approvedCount: HTMLElement
 ): void {
   totalCount.textContent = String(records.length);
+  totalDuration.textContent = `${formatDuration(records.reduce((sum, record) => sum + (record.duration ?? 0), 0))} 小时`;
   pendingCount.textContent = String(records.filter((record) => record.status === 'pending').length);
   approvedCount.textContent = String(records.filter((record) => record.status === 'approved').length);
+}
+
+function formatDuration(duration: number): string {
+  return Number.isInteger(duration) ? String(duration) : duration.toFixed(1);
 }
 
 function statusLabel(status: RecordStatus): string {
