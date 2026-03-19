@@ -19,14 +19,23 @@ interface StudentRecord {
   content: string;
   practice_date: string;
   location: string | null;
-  duration: number | null;
+  duration: number;
   image_path: string | null;
   status: RecordStatus;
   teacher_comment: string | null;
 }
 
+interface RecordStatistics {
+  total_records: number;
+  pending_count: number;
+  approved_count: number;
+  rejected_count: number;
+  total_duration: number;
+}
+
 interface StudentRecordsResponse extends ApiError {
   records: StudentRecord[];
+  statistics: RecordStatistics;
 }
 
 const session = requireRole('student', '../login.html');
@@ -82,7 +91,7 @@ async function loadRecords(
     }
 
     renderRecords(recordsContainer, data.records);
-    updateStats(data.records, totalCount, totalDuration, pendingCount, approvedCount);
+    updateStats(data.statistics, totalCount, totalDuration, pendingCount, approvedCount);
   } catch (error) {
     console.error('加载学生记录失败。', error);
     recordsContainer.innerHTML = `
@@ -163,16 +172,16 @@ function renderRecords(container: HTMLElement, records: StudentRecord[]): void {
 }
 
 function updateStats(
-  records: StudentRecord[],
+  statistics: RecordStatistics,
   totalCount: HTMLElement,
   totalDuration: HTMLElement,
   pendingCount: HTMLElement,
   approvedCount: HTMLElement
 ): void {
-  totalCount.textContent = String(records.length);
-  totalDuration.textContent = `${formatDuration(records.reduce((sum, record) => sum + (record.duration ?? 0), 0))} 小时`;
-  pendingCount.textContent = String(records.filter((record) => record.status === 'pending').length);
-  approvedCount.textContent = String(records.filter((record) => record.status === 'approved').length);
+  totalCount.textContent = String(statistics.total_records);
+  totalDuration.textContent = `${formatDuration(statistics.total_duration)} 小时`;
+  pendingCount.textContent = String(statistics.pending_count);
+  approvedCount.textContent = String(statistics.approved_count);
 }
 
 function formatDuration(duration: number): string {

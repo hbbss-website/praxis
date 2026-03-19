@@ -72,6 +72,14 @@ export interface RecordFilters {
   status?: RecordStatus | string | null;
 }
 
+export interface RecordStatistics {
+  total_records: number;
+  pending_count: number;
+  approved_count: number;
+  rejected_count: number;
+  total_duration: number;
+}
+
 export interface DatabaseState {
   users: User[];
   practice_records: PracticeRecord[];

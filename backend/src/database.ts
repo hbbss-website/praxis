@@ -8,6 +8,7 @@ import type {
   DatabaseState,
   PracticeRecord,
   RecordFilters,
+  RecordStatistics,
   RecordStatus,
   StudentRecord,
   TeacherRecord,
@@ -295,13 +296,29 @@ function deleteRecord(id: number): boolean {
   return true;
 }
 
-function getStatistics(): {
-  approved_count: number;
-  pending_count: number;
-  rejected_count: number;
+function calculateRecordStatistics(records: Pick<PracticeRecord, 'status' | 'duration'>[]): RecordStatistics {
+  return {
+    total_records: records.length,
+    pending_count: records.filter((record) => record.status === 'pending').length,
+    approved_count: records.filter((record) => record.status === 'approved').length,
+    rejected_count: records.filter((record) => record.status === 'rejected').length,
+    total_duration: records.reduce(
+      (sum, record) =>
+        record.status === 'approved' && typeof record.duration === 'number'
+          ? sum + record.duration
+          : sum,
+      0
+    )
+  };
+}
+
+function getStudentStatistics(studentId: number): RecordStatistics {
+  const records = getRecordsByStudent(studentId);
+  return calculateRecordStatistics(records);
+}
+
+function getStatistics(): RecordStatistics & {
   student_count: number;
-  total_records: number;
-  total_duration: number;
   student_durations: Array<{
     student_id: number;
     student_name: string;
@@ -309,13 +326,7 @@ function getStatistics(): {
     total_duration: number;
   }>;
 } {
-  const totalDuration = db.practice_records.reduce(
-    (sum, record) =>
-      record.status === 'approved' && typeof record.duration === 'number'
-        ? sum + record.duration
-        : sum,
-    0
-  );
+  const baseStats = calculateRecordStatistics(db.practice_records);
   const studentDurations = db.users
     .filter((user) => user.role === 'student')
     .map((student) => ({
@@ -341,12 +352,8 @@ function getStatistics(): {
     });
 
   return {
-    total_records: db.practice_records.length,
-    pending_count: db.practice_records.filter((record) => record.status === 'pending').length,
-    approved_count: db.practice_records.filter((record) => record.status === 'approved').length,
-    rejected_count: db.practice_records.filter((record) => record.status === 'rejected').length,
+    ...baseStats,
     student_count: db.users.filter((user) => user.role === 'student').length,
-    total_duration: totalDuration,
     student_durations: studentDurations
   };
 }
@@ -364,6 +371,7 @@ const database = {
   getRecordById,
   getRecordsByStudent,
   getStatistics,
+  getStudentStatistics,
   getTeacherRecordById,
   updateRecord
 };

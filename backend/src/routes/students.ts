@@ -35,7 +35,8 @@ function checkDuration(duration: number) {
 router.get('/records', authMiddleware, studentOnly, (request, response) => {
   try {
     const records = database.getRecordsByStudent(request.user!.id);
-    response.json({ records });
+    const statistics = database.getStudentStatistics(request.user!.id);
+    response.json({ records, statistics });
   } catch (error) {
     console.error('加载学生记录失败。', error);
     response.status(500).json({ error: '加载记录失败。' });
