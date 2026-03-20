@@ -32,6 +32,8 @@ interface TeacherRecord {
   status: RecordStatus;
   teacher_comment: string | null;
   created_at: string;
+  updated_at: string;
+  updated_by_username: string | null;
 }
 
 interface StudentsResponse extends ApiError {
@@ -44,6 +46,10 @@ interface TeacherRecordsResponse extends ApiError {
 
 interface TeacherRecordResponse extends ApiError {
   record: TeacherRecord;
+}
+
+interface UpdateRecordResponse extends ApiError {
+  message: string;
 }
 
 interface StatisticsResponse extends ApiError {
@@ -80,9 +86,19 @@ if (session) {
   const modalContent = requireElement<HTMLElement>('#modal-content');
   const reviewComment = requireElement<HTMLTextAreaElement>('#review-comment');
   const closeModalButton = requireElement<HTMLButtonElement>('#close-review-modal');
-  const cancelReviewButton = requireElement<HTMLButtonElement>('#cancel-review-button');
+
   const rejectReviewButton = requireElement<HTMLButtonElement>('#reject-review-button');
   const approveReviewButton = requireElement<HTMLButtonElement>('#approve-review-button');
+
+  const editModal = requireElement<HTMLElement>('#edit-modal');
+  const closeEditModalButton = requireElement<HTMLButtonElement>('#close-edit-modal');
+  const cancelEditButton = requireElement<HTMLButtonElement>('#cancel-edit-button');
+  const saveEditButton = requireElement<HTMLButtonElement>('#save-edit-button');
+  const editTitleInput = requireElement<HTMLInputElement>('#edit-title');
+  const editDateInput = requireElement<HTMLInputElement>('#edit-date');
+  const editDurationInput = requireElement<HTMLInputElement>('#edit-duration');
+  const editLocationInput = requireElement<HTMLInputElement>('#edit-location');
+  const editContentInput = requireElement<HTMLTextAreaElement>('#edit-content');
 
   let currentRecordId: number | null = null;
 
@@ -108,9 +124,7 @@ if (session) {
   closeModalButton.addEventListener('click', () => closeModal(reviewModal, reviewComment, () => {
     currentRecordId = null;
   }));
-  cancelReviewButton.addEventListener('click', () => closeModal(reviewModal, reviewComment, () => {
-    currentRecordId = null;
-  }));
+
   rejectReviewButton.addEventListener('click', () => {
     void submitReview('rejected');
   });
@@ -126,19 +140,41 @@ if (session) {
   });
   recordsTable.addEventListener('click', (event) => {
     const target = event.target as Element | null;
-    const button = target?.closest<HTMLButtonElement>('[data-action="open-review"]');
-
-    if (!button) {
+    
+    // Review Button
+    const reviewButton = target?.closest<HTMLButtonElement>('[data-action="open-review"]');
+    if (reviewButton) {
+      const recordId = Number(reviewButton.dataset.recordId);
+      if (Number.isFinite(recordId)) void openReviewModal(recordId);
       return;
     }
 
-    const recordId = Number(button.dataset.recordId);
-
-    if (!Number.isFinite(recordId)) {
+    // Edit Button
+    const editButton = target?.closest<HTMLButtonElement>('[data-action="edit-record"]');
+    if (editButton) {
+      const recordId = Number(editButton.dataset.recordId);
+      if (Number.isFinite(recordId)) void openEditModal(recordId);
       return;
     }
 
-    void openReviewModal(recordId);
+    // Delete Button
+    const deleteButton = target?.closest<HTMLButtonElement>('[data-action="delete-record"]');
+    if (deleteButton) {
+      const recordId = Number(deleteButton.dataset.recordId);
+      if (Number.isFinite(recordId) && window.confirm('确定要删除这条实践记录吗？')) {
+        void deleteRecord(recordId);
+      }
+      return;
+    }
+  });
+
+  closeEditModalButton.addEventListener('click', () => closeEditModal());
+  cancelEditButton.addEventListener('click', () => closeEditModal());
+  saveEditButton.addEventListener('click', () => {
+    void saveEdit();
+  });
+  editModal.addEventListener('click', (event) => {
+    if (event.target === editModal) closeEditModal();
   });
 
   void loadStudents(activeSession.token, studentFilter);
@@ -264,6 +300,96 @@ if (session) {
     } catch (error) {
       console.error('提交审核失败。', error);
       window.alert(error instanceof Error ? error.message : '保存审核结果失败。');
+    }
+  }
+
+  async function openEditModal(recordId: number): Promise<void> {
+    currentRecordId = recordId;
+
+    try {
+      const response = await fetch(`${API_URL}/teacher/records/${recordId}`, {
+        headers: { Authorization: `Bearer ${activeSession.token}` }
+      });
+      if (response.status === 401) { logout('../login.html'); return; }
+      
+      const data = await readJson<TeacherRecordResponse>(response);
+      if (!response.ok || !data) throw new Error(data?.error ?? '加载记录详情失败。');
+
+      const record = data.record;
+      editTitleInput.value = record.title;
+      editDateInput.value = record.practice_date.split('T')[0] ?? '';
+      editDurationInput.value = record.duration ? String(record.duration) : '';
+      editLocationInput.value = record.location ?? '';
+      editContentInput.value = record.content;
+
+      editModal.classList.add('show');
+    } catch (error) {
+      console.error('加载记录详情失败。', error);
+      window.alert('加载记录详情失败。');
+    }
+  }
+
+  async function saveEdit(): Promise<void> {
+    if (!currentRecordId) return;
+
+    try {
+      saveEditButton.disabled = true;
+      saveEditButton.textContent = '保存中...';
+
+      const response = await fetch(`${API_URL}/teacher/records/${currentRecordId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${activeSession.token}`
+        },
+        body: JSON.stringify({
+          title: editTitleInput.value.trim(),
+          practice_date: editDateInput.value,
+          duration: editDurationInput.value,
+          location: editLocationInput.value.trim() || null,
+          content: editContentInput.value.trim()
+        })
+      });
+
+      if (response.status === 401) { logout('../login.html'); return; }
+      
+      const data = await readJson<UpdateRecordResponse>(response);
+      if (!response.ok) throw new Error(data?.error ?? '保存修改失败。');
+
+      closeEditModal();
+      await loadRecords(activeSession.token, studentFilter, statusFilter, recordsTable);
+      await loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount, studentDurationList);
+    } catch (error) {
+      console.error('保存修改失败。', error);
+      window.alert(error instanceof Error ? error.message : '保存修改失败。');
+    } finally {
+      saveEditButton.disabled = false;
+      saveEditButton.textContent = '保存';
+    }
+  }
+
+  function closeEditModal(): void {
+    editModal.classList.remove('show');
+    currentRecordId = null;
+  }
+
+  async function deleteRecord(recordId: number): Promise<void> {
+    try {
+      const response = await fetch(`${API_URL}/teacher/records/${recordId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${activeSession.token}` }
+      });
+
+      if (response.status === 401) { logout('../login.html'); return; }
+
+      const data = await readJson<ApiError>(response);
+      if (!response.ok) throw new Error(data?.error ?? '删除记录失败。');
+
+      await loadRecords(activeSession.token, studentFilter, statusFilter, recordsTable);
+      await loadStatistics(activeSession.token, totalCount, pendingCount, approvedCount, studentCount, studentDurationList);
+    } catch (error) {
+      console.error('删除记录失败。', error);
+      window.alert(error instanceof Error ? error.message : '删除记录失败。');
     }
   }
 }
@@ -432,18 +558,41 @@ function renderRecords(recordsTable: HTMLElement, records: TeacherRecord[]): voi
             <span class="status-badge status-${record.status}">
               ${statusLabel(record.status)}
             </span>
+            ${record.updated_by_username
+              ? `<div class="record-edited-info" style="margin-top: 4px; font-size: 11px;">
+                   ${escapeHtml(record.updated_by_username)} 修改于 ${formatDate(record.updated_at, '-')}
+                 </div>`
+              : ''}
           </td>
           <td>${formatDateTime(record.created_at)}</td>
           <td>
-            <button
-              class="btn btn-sm"
-              type="button"
-              data-action="open-review"
-              data-record-id="${record.id}"
-              style="background: var(--primary); color: white;"
-            >
-              审核
-            </button>
+            <div style="display: flex; gap: 8px;">
+              <button
+                class="btn btn-sm"
+                type="button"
+                data-action="open-review"
+                data-record-id="${record.id}"
+                style="background: var(--primary); color: white;"
+              >
+                审核
+              </button>
+              <button
+                class="btn btn-sm btn-secondary"
+                type="button"
+                data-action="edit-record"
+                data-record-id="${record.id}"
+              >
+                修改
+              </button>
+              <button
+                class="btn btn-sm btn-danger"
+                type="button"
+                data-action="delete-record"
+                data-record-id="${record.id}"
+              >
+                删除
+              </button>
+            </div>
           </td>
         </tr>
       `

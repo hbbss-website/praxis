@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bun build:frontend && concurrently -n \"SERVER,BUILDER\" -c \"magenta,cyan\" \"bun --hot backend/src/server.ts\" \"bun --hot frontend/builder.ts\"",
     "start": "bun build:frontend && bun backend/src/server.ts",
-    "build:frontend": "bun build frontend/ts/login.ts frontend/ts/student/dashboard.ts frontend/ts/student/upload.ts frontend/ts/teacher/dashboard.ts --root frontend/ts --outdir frontend/js --target browser --format esm",
+    "build:frontend": "bun build frontend/ts/login.ts frontend/ts/student/dashboard.ts frontend/ts/student/upload.ts frontend/ts/student/notifications.ts frontend/ts/teacher/dashboard.ts --root frontend/ts --outdir frontend/js --target browser --format esm",
     "typecheck": "tsc --noEmit",
     "test:all": "bun build:frontend && bun typecheck && bun test"
   },

@@ -2,6 +2,17 @@ export type UserRole = 'student' | 'teacher';
 
 export type RecordStatus = 'approved' | 'pending' | 'rejected';
 
+export type NotificationType = 'approved' | 'rejected' | 'deleted';
+
+export interface AppNotification {
+  id: number;
+  student_id: number;
+  type: NotificationType;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
 export interface User {
   id: number;
   username: string;
@@ -36,6 +47,7 @@ export interface PracticeRecord {
   teacher_comment: string | null;
   created_at: string;
   updated_at: string;
+  updated_by_username: string | null;
 }
 
 export interface StudentRecord extends PracticeRecord {
@@ -65,6 +77,7 @@ export interface UpdateRecordInput {
   image_path?: string | null;
   status?: RecordStatus;
   teacher_comment?: string | null;
+  updated_by_username?: string | null;
 }
 
 export interface RecordFilters {
@@ -83,8 +96,10 @@ export interface RecordStatistics {
 export interface DatabaseState {
   users: User[];
   practice_records: PracticeRecord[];
+  notifications: AppNotification[];
   nextId: {
     users: number;
     practice_records: number;
+    notifications: number;
   };
 }

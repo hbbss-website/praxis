@@ -2,8 +2,29 @@ import { Router } from 'express';
 
 import database from '../database';
 import { authMiddleware, teacherOnly } from '../middleware/auth';
+import type { UpdateRecordInput } from '../models';
 
 const router = Router();
+
+function asRequiredString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function asOptionalString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function checkDate(date: string): boolean {
+  return Date.parse(date) <= Date.now() + 14 * 60 * 60 * 1000;
+}
+
+function checkDuration(duration: number) {
+  return duration >= 0.1;
+}
 
 router.get('/records', authMiddleware, teacherOnly, (request, response) => {
   try {
@@ -78,10 +99,85 @@ router.put('/records/:id/review', authMiddleware, teacherOnly, (request, respons
       return;
     }
 
+    const message = status === 'approved' 
+      ? `你的实践记录 "${updatedRecord.title}" 已被通过。` 
+      : `你的实践记录 "${updatedRecord.title}" 已被驳回。`;
+      
+    database.createNotification(updatedRecord.student_id, status, message);
+
     response.json({ message: '审核结果保存成功。' });
   } catch (error) {
     console.error('审核记录失败。', error);
     response.status(500).json({ error: '审核记录失败。' });
+  }
+});
+
+router.put('/records/:id', authMiddleware, teacherOnly, (request, response) => {
+  const existingRecord = database.getRecordById(Number(request.params.id));
+
+  if (!existingRecord) {
+    response.status(404).json({ error: '记录不存在。' });
+    return;
+  }
+
+  const updates: UpdateRecordInput = {
+    updated_by_username: request.user!.username
+  };
+  
+  const title = asRequiredString(request.body.title);
+  const content = asRequiredString(request.body.content);
+  const practiceDate = asRequiredString(request.body.practice_date);
+  const duration = asRequiredString(request.body.duration);
+
+  if (request.body.title !== undefined) {
+    if (!title) { response.status(400).json({ error: '标题不能为空。' }); return; }
+    updates.title = title;
+  }
+  if (request.body.content !== undefined) {
+    if (!content) { response.status(400).json({ error: '内容不能为空。' }); return; }
+    updates.content = content;
+  }
+  if (request.body.practice_date !== undefined) {
+    if (!practiceDate) { response.status(400).json({ error: '实践日期不能为空。' }); return; }
+    if (!checkDate(practiceDate)) { response.status(400).json({ error: '不能记录未来的活动。' }); return; }
+    updates.practice_date = practiceDate;
+  }
+  if (request.body.location !== undefined) {
+    updates.location = asOptionalString(request.body.location);
+  }
+  if (request.body.duration !== undefined) {
+    if (!duration) { response.status(400).json({ error: '时长不能为空。' }); return; }
+    if (!checkDuration(+duration)) { response.status(400).json({ error: '时长过短。' }); return; }
+    updates.duration = +duration;
+  }
+  if (request.body.image_path !== undefined) {
+    updates.image_path = asOptionalString(request.body.image_path);
+  }
+
+  try {
+    database.updateRecord(existingRecord.id, updates);
+    response.json({ message: '记录更新成功。' });
+  } catch (error) {
+    console.error('更新教师记录失败。', error);
+    response.status(500).json({ error: '更新记录失败。' });
+  }
+});
+
+router.delete('/records/:id', authMiddleware, teacherOnly, (request, response) => {
+  const existingRecord = database.getRecordById(Number(request.params.id));
+
+  if (!existingRecord) {
+    response.status(404).json({ error: '记录不存在。' });
+    return;
+  }
+
+  try {
+    database.deleteRecord(existingRecord.id);
+    database.createNotification(existingRecord.student_id, 'deleted', `你的实践记录 "${existingRecord.title}" 已被教师删除。`);
+    response.json({ message: '记录删除成功。' });
+  } catch (error) {
+    console.error('删除教师记录失败。', error);
+    response.status(500).json({ error: '删除记录失败。' });
   }
 });
 

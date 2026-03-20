@@ -123,9 +123,49 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="cancel-review-button" type="button">取消</button>
+
                 <button class="btn btn-danger" id="reject-review-button" type="button">驳回</button>
                 <button class="btn btn-success" id="approve-review-button" type="button">通过</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="modal-overlay" id="edit-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">编辑记录</h3>
+                <button class="modal-close" id="close-edit-modal" type="button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-form">
+                    <div class="form-group">
+                        <label for="edit-title">标题 *</label>
+                        <input type="text" id="edit-title" required>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div class="form-group">
+                            <label for="edit-date">实践日期 *</label>
+                            <input type="date" id="edit-date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-duration">时长（小时）*</label>
+                            <input type="number" id="edit-duration" min="0.1" step="0.1" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-location">地点</label>
+                        <input type="text" id="edit-location">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-content">内容 *</label>
+                        <textarea id="edit-content" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancel-edit-button" type="button">取消</button>
+                <button class="btn btn-primary" id="save-edit-button" type="button">保存</button>
             </div>
         </div>
     </div>

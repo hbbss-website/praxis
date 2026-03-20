@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type {
+  AppNotification,
   CreateRecordInput,
   DatabaseState,
   PracticeRecord,
@@ -12,6 +13,7 @@ import type {
   RecordStatus,
   StudentRecord,
   TeacherRecord,
+  NotificationType,
   UpdateRecordInput,
   User
 } from './models';
@@ -27,7 +29,8 @@ function createEmptyState(): DatabaseState {
   return {
     users: [],
     practice_records: [],
-    nextId: { users: 1, practice_records: 1 }
+    notifications: [],
+    nextId: { users: 1, practice_records: 1, notifications: 1 }
   };
 }
 
@@ -81,7 +84,8 @@ function sanitizeRecord(value: unknown): PracticeRecord | null {
       candidate.teacher_comment !== undefined) ||
     !VALID_RECORD_STATUSES.includes(candidate.status as RecordStatus) ||
     typeof candidate.created_at !== 'string' ||
-    typeof candidate.updated_at !== 'string'
+    typeof candidate.updated_at !== 'string' ||
+    (candidate.updated_by_username !== null && typeof candidate.updated_by_username !== 'string' && candidate.updated_by_username !== undefined)
   ) {
     return null;
   }
@@ -98,8 +102,30 @@ function sanitizeRecord(value: unknown): PracticeRecord | null {
     status: candidate.status as RecordStatus,
     teacher_comment: candidate.teacher_comment ?? null,
     created_at: candidate.created_at,
-    updated_at: candidate.updated_at
+    updated_at: candidate.updated_at,
+    updated_by_username: candidate.updated_by_username ?? null
   };
+}
+
+function sanitizeNotification(value: unknown): AppNotification | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as Partial<AppNotification>;
+
+  if (
+    typeof candidate.id !== 'number' ||
+    typeof candidate.student_id !== 'number' ||
+    typeof candidate.type !== 'string' ||
+    typeof candidate.message !== 'string' ||
+    typeof candidate.is_read !== 'boolean' ||
+    typeof candidate.created_at !== 'string'
+  ) {
+    return null;
+  }
+
+  return candidate as AppNotification;
 }
 
 function sanitizeDatabaseState(raw: unknown): DatabaseState {
@@ -112,16 +138,21 @@ function sanitizeDatabaseState(raw: unknown): DatabaseState {
   const practiceRecords = Array.isArray(candidate.practice_records)
     ? candidate.practice_records.map(sanitizeRecord).filter(Boolean) as PracticeRecord[]
     : [];
+  const notifications = Array.isArray(candidate.notifications)
+    ? candidate.notifications.map(sanitizeNotification).filter(Boolean) as AppNotification[]
+    : [];
 
   return {
     users,
     practice_records: practiceRecords,
+    notifications,
     nextId: {
       users: Math.max(toNumber(candidate.nextId?.users, 0), nextNumericId(users)),
       practice_records: Math.max(
         toNumber(candidate.nextId?.practice_records, 0),
         nextNumericId(practiceRecords)
-      )
+      ),
+      notifications: Math.max(toNumber(candidate.nextId?.notifications, 0), nextNumericId(notifications))
     }
   };
 }
@@ -259,7 +290,8 @@ function createRecord(record: CreateRecordInput): PracticeRecord {
     status: 'pending',
     teacher_comment: null,
     created_at: timestamp,
-    updated_at: timestamp
+    updated_at: timestamp,
+    updated_by_username: null
   };
 
   db.practice_records.push(newRecord);
@@ -294,6 +326,47 @@ function deleteRecord(id: number): boolean {
   db.practice_records.splice(index, 1);
   saveData();
   return true;
+}
+
+function createNotification(studentId: number, type: NotificationType, message: string): AppNotification {
+  const timestamp = new Date().toISOString();
+  const newNotification: AppNotification = {
+    id: db.nextId.notifications++,
+    student_id: studentId,
+    type,
+    message,
+    is_read: false,
+    created_at: timestamp
+  };
+
+  db.notifications.push(newNotification);
+  saveData();
+  return newNotification;
+}
+
+function getNotificationsByStudent(studentId: number): AppNotification[] {
+  return db.notifications
+    .filter((notification) => notification.student_id === Number(studentId))
+    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+}
+
+function getUnreadNotificationCount(studentId: number): number {
+  return db.notifications.filter(
+    (notification) => notification.student_id === Number(studentId) && !notification.is_read
+  ).length;
+}
+
+function markNotificationsAsRead(studentId: number): void {
+  let updated = false;
+  for (const notification of db.notifications) {
+    if (notification.student_id === Number(studentId) && !notification.is_read) {
+      notification.is_read = true;
+      updated = true;
+    }
+  }
+  if (updated) {
+    saveData();
+  }
 }
 
 function calculateRecordStatistics(records: Pick<PracticeRecord, 'status' | 'duration'>[]): RecordStatistics {
@@ -373,7 +446,11 @@ const database = {
   getStatistics,
   getStudentStatistics,
   getTeacherRecordById,
-  updateRecord
+  updateRecord,
+  createNotification,
+  getNotificationsByStudent,
+  getUnreadNotificationCount,
+  markNotificationsAsRead
 };
 
 export default database;

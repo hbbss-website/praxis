@@ -5,12 +5,27 @@ import {
   readJson,
   requireElement,
   requireRole,
+  updateNotificationBadge,
+  getApiOrigin,
   type ApiError
 } from '../shared';
+
+type RecordStatus = 'approved' | 'pending' | 'rejected';
 
 interface UploadResponse extends ApiError {
   filename: string;
   imageUrl: string;
+}
+
+interface StudentRecord {
+  id: number;
+  title: string;
+  content: string;
+  practice_date: string;
+  location: string | null;
+  duration: number;
+  image_path: string | null;
+  status: RecordStatus;
 }
 
 interface CreateRecordResponse extends ApiError {
@@ -43,7 +58,56 @@ if (session) {
 
   const now = new Date();
   practiceDateInput.valueAsDate = now;
-  practiceDateInput.max = now.toLocaleDateString('en-CA');
+  practiceDateInput.max = now.toLocaleDateString('sv-SE');
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const editId = urlParams.get('id');
+  let originalImagePath: string | null = null;
+
+  if (editId) {
+    requireElement('h1').textContent = '编辑社会实践记录';
+    submitButton.textContent = '保存修改';
+    document.title = '编辑记录 - 社会实践系统';
+    void loadRecordForEdit(session.token, editId);
+  }
+
+  void updateNotificationBadge(session.token);
+
+  async function loadRecordForEdit(token: string, id: string): Promise<void> {
+    try {
+      const response = await fetch(`${API_URL}/student/records`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.status === 401) { logout('../login.html'); return; }
+
+      const data = await readJson<{ records: StudentRecord[] }>(response);
+      if (!response.ok || !data) throw new Error('加载记录失败。');
+
+      const record = data.records.find(r => String(r.id) === id);
+      if (!record || (record.status !== 'pending' && record.status !== 'rejected')) {
+        window.alert('无法编辑该记录或记录不存在。');
+        window.location.href = 'dashboard.html';
+        return;
+      }
+
+      titleInput.value = record.title;
+      contentInput.value = record.content;
+      practiceDateInput.value = record.practice_date;
+      locationInput.value = record.location ?? '';
+      durationInput.value = String(record.duration);
+
+      if (record.image_path) {
+        originalImagePath = record.image_path;
+        imagePreview.src = getApiOrigin() + record.image_path;
+        imagePreview.style.display = 'block';
+        uploadPlaceholder.style.display = 'none';
+        imageUpload.classList.add('has-image');
+      }
+    } catch (err) {
+      console.error(err);
+      window.alert('加载记录失败。');
+    }
+  }
 
   imageUpload.addEventListener('click', () => imageInput.click());
   imageUpload.addEventListener('keydown', (event) => {
@@ -111,10 +175,16 @@ if (session) {
         }
 
         imagePath = uploadData.imageUrl;
+      } else if (originalImagePath && selectedImage === null) {
+        // If image wasn't changed but existed
+        imagePath = originalImagePath;
       }
 
-      const response = await fetch(`${API_URL}/student/records`, {
-        method: 'POST',
+      const method = editId ? 'PUT' : 'POST';
+      const endpoint = editId ? `${API_URL}/student/records/${editId}` : `${API_URL}/student/records`;
+
+      const response = await fetch(endpoint, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.token}`
@@ -137,10 +207,10 @@ if (session) {
       const data = await readJson<CreateRecordResponse>(response);
 
       if (!response.ok || !data) {
-        throw new Error(data?.error ?? '提交记录失败。');
+        throw new Error(data?.error ?? (editId ? '更新记录失败。' : '提交记录失败。'));
       }
 
-      showSuccess(errorMessage, successMessage, '记录提交成功。');
+      showSuccess(errorMessage, successMessage, editId ? '记录更新成功。' : '记录提交成功。');
       form.reset();
       resetImagePreview(imagePreview, uploadPlaceholder, imageUpload);
       imageInput.value = '';

@@ -93,7 +93,14 @@ router.put('/records/:id', authMiddleware, studentOnly, (request, response) => {
     return;
   }
 
-  const updates: UpdateRecordInput = {};
+  if (existingRecord.status !== 'pending' && existingRecord.status !== 'rejected') {
+    response.status(403).json({ error: '只能修改待审核或已驳回的记录。' });
+    return;
+  }
+
+  const updates: UpdateRecordInput = {
+    updated_by_username: request.user!.username
+  };
   const title = asRequiredString(request.body.title);
   const content = asRequiredString(request.body.content);
   const practiceDate = asRequiredString(request.body.practice_date);
@@ -165,12 +172,38 @@ router.delete('/records/:id', authMiddleware, studentOnly, (request, response) =
     return;
   }
 
+  if (existingRecord.status !== 'pending') {
+    response.status(403).json({ error: '只能删除待审核的记录。' });
+    return;
+  }
+
   try {
     database.deleteRecord(existingRecord.id);
     response.json({ message: '记录删除成功。' });
   } catch (error) {
     console.error('删除学生记录失败。', error);
     response.status(500).json({ error: '删除记录失败。' });
+  }
+});
+
+router.get('/notifications', authMiddleware, studentOnly, (request, response) => {
+  try {
+    const notifications = database.getNotificationsByStudent(request.user!.id);
+    const unreadCount = database.getUnreadNotificationCount(request.user!.id);
+    response.json({ notifications, unreadCount });
+  } catch (error) {
+    console.error('加载通知失败。', error);
+    response.status(500).json({ error: '加载通知失败。' });
+  }
+});
+
+router.post('/notifications/read', authMiddleware, studentOnly, (request, response) => {
+  try {
+    database.markNotificationsAsRead(request.user!.id);
+    response.json({ message: '通知已标记为已读。' });
+  } catch (error) {
+    console.error('标记通知已读失败。', error);
+    response.status(500).json({ error: '操作失败。' });
   }
 });
 

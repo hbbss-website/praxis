@@ -8,6 +8,7 @@ import {
   readJson,
   requireElement,
   requireRole,
+  updateNotificationBadge,
   type ApiError
 } from '../shared';
 
@@ -23,6 +24,8 @@ interface StudentRecord {
   image_path: string | null;
   status: RecordStatus;
   teacher_comment: string | null;
+  updated_at: string;
+  updated_by_username: string | null;
 }
 
 interface RecordStatistics {
@@ -63,7 +66,53 @@ if (session) {
     window.alert(`记录 ID：${recordId ?? ''}`);
   });
 
+  recordsContainer.addEventListener('click', (event) => {
+    const target = event.target as Element | null;
+    const deleteButton = target?.closest<HTMLButtonElement>('[data-action="delete-record"]');
+    if (deleteButton) {
+      const recordId = Number(deleteButton.dataset.recordId);
+      if (Number.isFinite(recordId) && window.confirm('确定要删除这条实践记录吗？')) {
+        void deleteRecord(session.token, recordId, recordsContainer, totalCount, totalDuration, pendingCount, approvedCount);
+      }
+    }
+  });
+
+  void updateNotificationBadge(session.token);
   void loadRecords(session.token, recordsContainer, totalCount, totalDuration, pendingCount, approvedCount);
+}
+
+async function deleteRecord(
+  token: string,
+  recordId: number,
+  recordsContainer: HTMLElement,
+  totalCount: HTMLElement,
+  totalDuration: HTMLElement,
+  pendingCount: HTMLElement,
+  approvedCount: HTMLElement
+): Promise<void> {
+  try {
+    const response = await fetch(`${API_URL}/student/records/${recordId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (response.status === 401) {
+      logout('../login.html');
+      return;
+    }
+
+    const data = await readJson<ApiError>(response);
+    
+    if (!response.ok) {
+      throw new Error(data?.error ?? '删除记录失败。');
+    }
+
+    // Reload records after deletion
+    await loadRecords(token, recordsContainer, totalCount, totalDuration, pendingCount, approvedCount);
+  } catch (error) {
+    console.error('删除记录失败。', error);
+    window.alert(error instanceof Error ? error.message : '删除记录失败。');
+  }
 }
 
 async function loadRecords(
@@ -145,16 +194,42 @@ function renderRecords(container: HTMLElement, records: StudentRecord[]): void {
                 <p class="record-description">${escapeHtml(record.content)}</p>
                 <div class="record-footer">
                   <span class="status-badge status-${record.status}">${statusLabel(record.status)}</span>
-                  <button
-                    class="btn btn-sm"
-                    data-action="view-record"
-                    data-record-id="${record.id}"
-                    style="background: var(--gray-100); color: var(--gray-800);"
-                    type="button"
-                  >
-                    详情
-                  </button>
+                  <div style="display: flex; gap: 8px;">
+                    ${
+                      (record.status === 'pending' || record.status === 'rejected')
+                        ? `<a href="upload.html?id=${record.id}" class="btn btn-sm btn-secondary" style="text-decoration: none;">修改</a>`
+                        : ''
+                    }
+                    ${
+                      record.status === 'pending'
+                        ? `<button
+                            class="btn btn-sm btn-danger"
+                            data-action="delete-record"
+                            data-record-id="${record.id}"
+                            type="button"
+                          >
+                            删除
+                          </button>`
+                        : ''
+                    }
+                    <button
+                      class="btn btn-sm"
+                      data-action="view-record"
+                      data-record-id="${record.id}"
+                      style="background: var(--gray-100); color: var(--gray-800);"
+                      type="button"
+                    >
+                      详情
+                    </button>
+                  </div>
                 </div>
+                ${
+                  record.updated_by_username
+                    ? `<div class="record-edited-info">
+                        ${escapeHtml(record.updated_by_username)} 修改于 ${formatDate(record.updated_at, '-')}
+                       </div>`
+                    : ''
+                }
                 ${
                   record.teacher_comment
                     ? `<div style="margin-top: 12px; padding: 12px; background: #f3f4f6; border-radius: 8px; font-size: 13px;">

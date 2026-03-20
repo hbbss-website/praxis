@@ -166,6 +166,11 @@ body {
 /* 侧边栏 */
 .sidebar {
   width: 260px;
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 100;
   background: white;
   box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1);
   display: flex;
@@ -229,6 +234,72 @@ body {
   margin-right: 12px;
 }
 
+.nav-item-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.notification-badge {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  background-color: var(--danger);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  min-width: 20px;
+  text-align: center;
+  display: none;
+}
+
+.notification-badge.show {
+  display: inline-block;
+}
+
+.record-edited-info {
+  font-size: 12px;
+  color: var(--gray-600);
+  font-style: italic;
+  margin-top: 8px;
+}
+
+.notification-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.notification-item {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.3s ease;
+}
+
+.notification-item.unread {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.notification-item-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--gray-600);
+}
+
+.notification-item-content {
+  font-size: 15px;
+  color: var(--gray-900);
+}
+
 .sidebar-footer {
   padding: 16px;
   border-top: 1px solid var(--gray-200);
@@ -272,7 +343,7 @@ body {
 .main-content {
   flex: 1;
   padding: 32px;
-  overflow-y: auto;
+  margin-left: 260px;
 }
 
 .page-header {
@@ -529,6 +600,7 @@ tbody tr:hover {
   margin-bottom: 16px;
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -716,6 +788,7 @@ tbody tr:hover {
   }
   
   .main-content {
+    margin-left: 0;
     padding: 16px;
   }
   

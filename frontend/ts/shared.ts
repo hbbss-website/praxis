@@ -117,7 +117,7 @@ export function formatDate(value: string | null | undefined, fallback = ''): str
     return fallback;
   }
 
-  return new Date(value).toLocaleDateString('zh-CN');
+  return new Date(value).toLocaleDateString('sv-SE');
 }
 
 export function formatDateTime(value: string | null | undefined, fallback = '-'): string {
@@ -125,7 +125,7 @@ export function formatDateTime(value: string | null | undefined, fallback = '-')
     return fallback;
   }
 
-  return new Date(value).toLocaleString('zh-CN');
+  return new Date(value).toLocaleString('sv-SE');
 }
 
 export function getApiOrigin(): string {
@@ -136,3 +136,27 @@ export async function readJson<T>(response: Response): Promise<T | null> {
   const text = await response.text();
   return text ? (JSON.parse(text) as T) : null;
 }
+
+export async function updateNotificationBadge(token: string): Promise<void> {
+  const badge = document.querySelector<HTMLElement>('#nav-notification-badge');
+  if (!badge) return;
+
+  try {
+    const response = await fetch(`${API_URL}/student/notifications`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!response.ok) return;
+
+    const data = await readJson<{ unreadCount: number }>(response);
+    if (data && data.unreadCount > 0) {
+      badge.textContent = String(data.unreadCount);
+      badge.classList.add('show');
+    } else {
+      badge.classList.remove('show');
+    }
+  } catch (error) {
+    console.error('Failed to load notification count', error);
+  }
+}
+
