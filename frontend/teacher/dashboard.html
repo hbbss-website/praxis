@@ -8,34 +8,7 @@
 </head>
 <body>
     <div class="app-container">
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h2>社会实践系统</h2>
-                <span class="role-badge teacher">教师</span>
-            </div>
-
-            <nav class="sidebar-nav">
-                <a href="dashboard.html" class="active">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-                    </svg>
-                    记录管理
-                </a>
-            </nav>
-
-            <div class="sidebar-footer">
-                <div class="user-info">
-                    <div class="user-avatar" id="user-avatar">T</div>
-                    <div class="user-details">
-                        <div class="user-name" id="user-name">加载中...</div>
-                        <div class="user-role">教师</div>
-                    </div>
-                </div>
-                <button class="btn btn-secondary btn-sm" id="logout-button" type="button" style="width: 100%;">
-                    退出登录
-                </button>
-            </div>
-        </aside>
+        <aside class="sidebar"></aside>
 
         <main class="main-content">
             <div class="page-header">
@@ -73,13 +46,24 @@
                         <option value="approved">已通过</option>
                         <option value="rejected">已驳回</option>
                     </select>
+                    <input type="date" id="filter-created-after" title="创建时间起">
+                    <input type="date" id="filter-created-before" title="创建时间止">
                     <button class="btn btn-primary btn-sm" id="refresh-records-button" type="button">刷新</button>
+                </div>
+
+                <div class="batch-bar" id="batch-bar" style="display: none;">
+                    <span id="batch-count">已选 0 条</span>
+                    <button class="btn btn-sm btn-success" id="batch-approve-btn" type="button">批量通过</button>
+                    <button class="btn btn-sm btn-danger" id="batch-reject-btn" type="button">批量驳回</button>
+                    <button class="btn btn-sm btn-warning" id="batch-undo-btn" type="button">批量撤销</button>
+                    <button class="btn btn-sm btn-danger" id="batch-delete-btn" type="button">批量删除</button>
                 </div>
 
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
+                                <th><input type="checkbox" id="select-all"></th>
                                 <th>学生</th>
                                 <th>标题</th>
                                 <th>实践日期</th>
@@ -91,9 +75,7 @@
                         </thead>
                         <tbody id="records-table">
                             <tr>
-                                <td colspan="7" style="text-align: center; padding: 40px;">
-                                    加载中...
-                                </td>
+                                <td colspan="8" style="text-align: center; padding: 40px;">加载中...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -124,13 +106,13 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="cancel-review-button" type="button">取消</button>
+                <button class="btn btn-warning" id="undo-review-button" type="button">撤销审核</button>
                 <button class="btn btn-danger" id="reject-review-button" type="button">驳回</button>
                 <button class="btn btn-success" id="approve-review-button" type="button">通过</button>
             </div>
         </div>
     </div>
 
-    <!-- Edit Modal -->
     <div class="modal-overlay" id="edit-modal">
         <div class="modal">
             <div class="modal-header">

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生管理 - 管理中心</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar"></aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1>学生管理</h1>
+                <p>管理学生账号列表。</p>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">学生列表</h3>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>UID</th>
+                                <th>姓名</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stu-table">
+                            <tr>
+                                <td colspan="3" style="text-align: center; padding: 40px;">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div class="modal-overlay" id="edit-user-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">编辑用户</h3>
+                <button class="modal-close" id="close-edit-user" type="button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="error-message" id="edit-user-error"></div>
+                <form id="edit-user-form">
+                    <div class="form-group"><label for="edit-user-name">姓名</label><input type="text"
+                            id="edit-user-name"></div>
+                    <div class="form-group"><label for="edit-user-password">新密码（留空则不修改，至少 8 位）</label><input
+                            type="password" id="edit-user-password" minlength="8"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancel-edit-user" type="button">取消</button>
+                <button class="btn btn-primary" id="save-edit-user" type="button">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="../js/admin/students.js"></script>
+</body>
+
+</html>

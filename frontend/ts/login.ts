@@ -4,8 +4,8 @@ interface LoginResponse {
   token: string;
   user: {
     id: number;
-    username: string;
-    role: 'student' | 'teacher';
+    uid: string;
+    role: 'admin' | 'teacher' | 'student';
     name: string;
   };
   error?: string;
@@ -19,7 +19,7 @@ if (existingToken && existingUser) {
 }
 
 const form = requireElement<HTMLFormElement>('#login-form');
-const usernameInput = requireElement<HTMLInputElement>('#username');
+const uidInput = requireElement<HTMLInputElement>('#uid');
 const passwordInput = requireElement<HTMLInputElement>('#password');
 const loginButton = requireElement<HTMLButtonElement>('#login-btn');
 const errorMessage = requireElement<HTMLElement>('#error-message');
@@ -36,7 +36,7 @@ form.addEventListener('submit', async (event) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        username: usernameInput.value.trim(),
+        uid: uidInput.value.trim(),
         password: passwordInput.value
       })
     });

@@ -7,21 +7,14 @@ import type { UpdateRecordInput } from '../models';
 const router = Router();
 
 function asRequiredString(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
+  if (typeof value !== 'string') return null;
   const trimmed = value.trim();
-  return trimmed ? trimmed : null;
+  return trimmed || null;
 }
 
 function asOptionalString(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed || null;
+  if (typeof value !== 'string') return null;
+  return value.trim() || null;
 }
 
 function checkDate(date: string): boolean {
@@ -64,6 +57,12 @@ router.post('/records', authMiddleware, studentOnly, (request, response) => {
     return;
   }
 
+  const todayCount = database.countStudentRecordsToday(request.user!.id);
+  if (todayCount >= database.MAX_DAILY_RECORDS) {
+    response.status(429).json({ error: `每天最多创建 ${database.MAX_DAILY_RECORDS} 条实践记录。` });
+    return;
+  }
+
   try {
     const record = database.createRecord({
       student_id: request.user!.id,
@@ -75,10 +74,7 @@ router.post('/records', authMiddleware, studentOnly, (request, response) => {
       image_path: asOptionalString(request.body.image_path)
     });
 
-    response.json({
-      message: '记录创建成功。',
-      recordId: record.id
-    });
+    response.json({ message: '记录创建成功。', recordId: record.id });
   } catch (error) {
     console.error('创建学生记录失败。', error);
     response.status(500).json({ error: '创建记录失败。' });
@@ -98,59 +94,33 @@ router.put('/records/:id', authMiddleware, studentOnly, (request, response) => {
     return;
   }
 
-  const updates: UpdateRecordInput = {
-    updated_by_username: request.user!.username
-  };
+  const updates: UpdateRecordInput = { updated_by_uid: request.user!.uid };
   const title = asRequiredString(request.body.title);
   const content = asRequiredString(request.body.content);
   const practiceDate = asRequiredString(request.body.practice_date);
   const duration = asRequiredString(request.body.duration);
 
   if (request.body.title !== undefined) {
-    if (!title) {
-      response.status(400).json({ error: '标题不能为空。' });
-      return;
-    }
-
+    if (!title) { response.status(400).json({ error: '标题不能为空。' }); return; }
     updates.title = title;
   }
-
   if (request.body.content !== undefined) {
-    if (!content) {
-      response.status(400).json({ error: '内容不能为空。' });
-      return;
-    }
+    if (!content) { response.status(400).json({ error: '内容不能为空。' }); return; }
     updates.content = content;
   }
-
   if (request.body.practice_date !== undefined) {
-    if (!practiceDate) {
-      response.status(400).json({ error: '实践日期不能为空。' });
-      return;
-    }
-    if (!checkDate(practiceDate)) {
-      response.status(400).json({ error: '不能记录未来的活动。' });
-      return;
-    }
+    if (!practiceDate) { response.status(400).json({ error: '实践日期不能为空。' }); return; }
+    if (!checkDate(practiceDate)) { response.status(400).json({ error: '不能记录未来的活动。' }); return; }
     updates.practice_date = practiceDate;
   }
-
   if (request.body.location !== undefined) {
     updates.location = asOptionalString(request.body.location);
   }
-
   if (request.body.duration !== undefined) {
-    if (!duration) {
-      response.status(400).json({ error: '时长不能为空。' });
-      return;
-    }
-    if (!checkDuration(+duration)) {
-      response.status(400).json({ error: '时长过短。' });
-      return;
-    }
+    if (!duration) { response.status(400).json({ error: '时长不能为空。' }); return; }
+    if (!checkDuration(+duration)) { response.status(400).json({ error: '时长过短。' }); return; }
     updates.duration = +duration;
   }
-
   if (request.body.image_path !== undefined) {
     updates.image_path = asOptionalString(request.body.image_path);
   }

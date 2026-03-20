@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import multer, { type FileFilterCallback } from 'multer';
 
 import { authMiddleware } from './middleware/auth';
+import adminRoutes from './routes/admin';
 import authRoutes from './routes/auth';
 import studentRoutes from './routes/students';
 import teacherRoutes from './routes/teachers';
@@ -73,10 +74,11 @@ app.use(
     optionsSuccessStatus: 204
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(uploadDir));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/teacher', teacherRoutes);
 

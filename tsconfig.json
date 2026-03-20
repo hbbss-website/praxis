@@ -3,7 +3,10 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
@@ -12,7 +15,9 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "resolveJsonModule": true,
-    "types": ["bun"],
+    "types": [
+      "bun"
+    ],
     "isolatedModules": true
   },
   "include": [
@@ -20,7 +25,12 @@
     "backend/src/**/*.d.ts",
     "backend/tests/**/*.ts",
     "frontend/ts/**/*.ts",
+    "frontend/build.ts",
+    "frontend/autobuild.ts",
     "tests/**/*.ts"
   ],
-  "exclude": ["frontend/js", "node_modules"]
+  "exclude": [
+    "frontend/js",
+    "node_modules"
+  ]
 }

@@ -1,21 +1,21 @@
+import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 
 import database from '../database';
-import { authMiddleware, teacherOnly } from '../middleware/auth';
-import type { UpdateRecordInput } from '../models';
+import { authMiddleware, teacherOrAdmin } from '../middleware/auth';
+import type { RecordFilters, UpdateRecordInput } from '../models';
 
 const router = Router();
 
 function asRequiredString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
-  return trimmed ? trimmed : null;
+  return trimmed || null;
 }
 
 function asOptionalString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed || null;
+  return value.trim() || null;
 }
 
 function checkDate(date: string): boolean {
@@ -26,29 +26,39 @@ function checkDuration(duration: number) {
   return duration >= 0.1 && Number.isInteger(duration * 10);
 }
 
-router.get('/records', authMiddleware, teacherOnly, (request, response) => {
-  try {
-    const records = database.getAllRecords({
-      student_id: typeof request.query.student_id === 'string' ? request.query.student_id : null,
-      status: typeof request.query.status === 'string' ? request.query.status : null
-    });
+/** Get student IDs visible to the current user (all for admin, assigned for teacher) */
+function getVisibleStudentIds(userId: number, role: string): Set<number> | undefined {
+  if (role === 'admin') return undefined; // admin sees all
+  const students = database.getTeacherStudents(userId);
+  return new Set(students.map((s) => s.id));
+}
 
+// --- Records ---
+
+router.get('/records', authMiddleware, teacherOrAdmin, (request, response) => {
+  try {
+    const studentIds = getVisibleStudentIds(request.user!.id, request.user!.role);
+    const filters: RecordFilters = {
+      student_id: typeof request.query.student_id === 'string' ? request.query.student_id : null,
+      status: typeof request.query.status === 'string' ? request.query.status : null,
+      created_after: typeof request.query.created_after === 'string' ? request.query.created_after : null,
+      created_before: typeof request.query.created_before === 'string' ? request.query.created_before : null,
+      updated_after: typeof request.query.updated_after === 'string' ? request.query.updated_after : null,
+      updated_before: typeof request.query.updated_before === 'string' ? request.query.updated_before : null
+    };
+    const records = database.getAllRecords(filters, studentIds);
     response.json({ records });
   } catch (error) {
-    console.error('加载教师记录失败。', error);
+    console.error('加载记录失败。', error);
     response.status(500).json({ error: '加载记录失败。' });
   }
 });
 
-router.get('/records/:id', authMiddleware, teacherOnly, (request, response) => {
+router.get('/records/:id', authMiddleware, teacherOrAdmin, (request, response) => {
   try {
-    const record = database.getTeacherRecordById(Number(request.params.id));
-
-    if (!record) {
-      response.status(404).json({ error: '记录不存在。' });
-      return;
-    }
-
+    const studentIds = getVisibleStudentIds(request.user!.id, request.user!.role);
+    const record = database.getTeacherRecordById(Number(request.params.id), studentIds);
+    if (!record) { response.status(404).json({ error: '记录不存在。' }); return; }
     response.json({ record });
   } catch (error) {
     console.error('加载记录详情失败。', error);
@@ -56,54 +66,30 @@ router.get('/records/:id', authMiddleware, teacherOnly, (request, response) => {
   }
 });
 
-router.get('/students', authMiddleware, teacherOnly, (_request, response) => {
-  try {
-    const students = database.getAllStudents();
-    response.json({ students });
-  } catch (error) {
-    console.error('加载学生列表失败。', error);
-    response.status(500).json({ error: '加载学生列表失败。' });
-  }
-});
-
-router.get('/students/:id/records', authMiddleware, teacherOnly, (request, response) => {
-  try {
-    const records = database.getRecordsByStudent(Number(request.params.id));
-    response.json({ records });
-  } catch (error) {
-    console.error('加载学生详情记录失败。', error);
-    response.status(500).json({ error: '加载记录失败。' });
-  }
-});
-
-router.put('/records/:id/review', authMiddleware, teacherOnly, (request, response) => {
+router.put('/records/:id/review', authMiddleware, teacherOrAdmin, (request, response) => {
   const status = request.body.status;
-  const comment =
-    typeof request.body.comment === 'string' && request.body.comment.trim()
-      ? request.body.comment.trim()
-      : null;
+  const comment = typeof request.body.comment === 'string' && request.body.comment.trim()
+    ? request.body.comment.trim() : null;
 
-  if (status !== 'approved' && status !== 'rejected') {
-    response.status(400).json({ error: '审核状态只能是通过或驳回。' });
+  if (status !== 'approved' && status !== 'rejected' && status !== 'pending') {
+    response.status(400).json({ error: '审核状态只能是通过、驳回或撤销审核。' });
     return;
   }
 
   try {
-    const updatedRecord = database.updateRecord(Number(request.params.id), {
-      status,
-      teacher_comment: comment
-    });
+    const studentIds = getVisibleStudentIds(request.user!.id, request.user!.role);
+    const existing = database.getTeacherRecordById(Number(request.params.id), studentIds);
+    if (!existing) { response.status(404).json({ error: '记录不存在。' }); return; }
 
-    if (!updatedRecord) {
-      response.status(404).json({ error: '记录不存在。' });
-      return;
-    }
+    const updated = database.updateRecord(existing.id, { status, teacher_comment: comment });
+    if (!updated) { response.status(404).json({ error: '记录不存在。' }); return; }
 
-    const message = status === 'approved'
-      ? `你的实践记录 "${updatedRecord.title}" 已被通过。`
-      : `你的实践记录 "${updatedRecord.title}" 已被驳回。`;
+    let message = '';
+    if (status === 'approved') message = `你的实践记录 "${updated.title}" 已被通过。`;
+    else if (status === 'rejected') message = `你的实践记录 "${updated.title}" 已被驳回。`;
+    else message = `你的实践记录 "${updated.title}" 已被退回待审核。`;
 
-    database.createNotification(updatedRecord.student_id, status, message);
+    database.createNotification(updated.student_id, status === 'pending' ? 'other' : status, message);
 
     response.json({ message: '审核结果保存成功。' });
   } catch (error) {
@@ -112,18 +98,59 @@ router.put('/records/:id/review', authMiddleware, teacherOnly, (request, respons
   }
 });
 
-router.put('/records/:id', authMiddleware, teacherOnly, (request, response) => {
-  const existingRecord = database.getRecordById(Number(request.params.id));
+router.post('/records/batch-review', authMiddleware, teacherOrAdmin, (request, response) => {
+  const ids = request.body.ids;
+  const action = request.body.action; // 'approved' | 'rejected' | 'deleted'
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    response.status(400).json({ error: '请选择至少一条记录。' });
+    return;
+  }
+
+  if (action !== 'approved' && action !== 'rejected' && action !== 'deleted') {
+    response.status(400).json({ error: '操作类型无效。' });
+    return;
+  }
+
+  try {
+    const studentIds = getVisibleStudentIds(request.user!.id, request.user!.role);
+    let successCount = 0;
+
+    for (const id of ids) {
+      const record = database.getTeacherRecordById(Number(id), studentIds);
+      if (!record) continue;
+
+      if (action === 'deleted') {
+        database.deleteRecord(record.id);
+        database.createNotification(record.student_id, 'deleted',
+          `你的实践记录 "${record.title}" 已被删除。`);
+      } else {
+        database.updateRecord(record.id, { status: action, teacher_comment: null });
+        const msg = action === 'approved'
+          ? `你的实践记录 "${record.title}" 已被通过。`
+          : `你的实践记录 "${record.title}" 已被驳回。`;
+        database.createNotification(record.student_id, action, msg);
+      }
+      successCount++;
+    }
+
+    response.json({ message: `成功处理 ${successCount} 条记录。` });
+  } catch (error) {
+    console.error('批量操作失败。', error);
+    response.status(500).json({ error: '批量操作失败。' });
+  }
+});
+
+router.put('/records/:id', authMiddleware, teacherOrAdmin, (request, response) => {
+  const studentIds = getVisibleStudentIds(request.user!.id, request.user!.role);
+  const existingRecord = database.getTeacherRecordById(Number(request.params.id), studentIds);
 
   if (!existingRecord) {
     response.status(404).json({ error: '记录不存在。' });
     return;
   }
 
-  const updates: UpdateRecordInput = {
-    updated_by_username: request.user!.username
-  };
-
+  const updates: UpdateRecordInput = { updated_by_uid: request.user!.uid };
   const title = asRequiredString(request.body.title);
   const content = asRequiredString(request.body.content);
   const practiceDate = asRequiredString(request.body.practice_date);
@@ -158,13 +185,14 @@ router.put('/records/:id', authMiddleware, teacherOnly, (request, response) => {
     database.updateRecord(existingRecord.id, updates);
     response.json({ message: '记录更新成功。' });
   } catch (error) {
-    console.error('更新教师记录失败。', error);
+    console.error('更新记录失败。', error);
     response.status(500).json({ error: '更新记录失败。' });
   }
 });
 
-router.delete('/records/:id', authMiddleware, teacherOnly, (request, response) => {
-  const existingRecord = database.getRecordById(Number(request.params.id));
+router.delete('/records/:id', authMiddleware, teacherOrAdmin, (request, response) => {
+  const studentIds = getVisibleStudentIds(request.user!.id, request.user!.role);
+  const existingRecord = database.getTeacherRecordById(Number(request.params.id), studentIds);
 
   if (!existingRecord) {
     response.status(404).json({ error: '记录不存在。' });
@@ -173,17 +201,83 @@ router.delete('/records/:id', authMiddleware, teacherOnly, (request, response) =
 
   try {
     database.deleteRecord(existingRecord.id);
-    database.createNotification(existingRecord.student_id, 'deleted', `你的实践记录 "${existingRecord.title}" 已被教师删除。`);
+    database.createNotification(existingRecord.student_id, 'deleted',
+      `你的实践记录 "${existingRecord.title}" 已被删除。`);
     response.json({ message: '记录删除成功。' });
   } catch (error) {
-    console.error('删除教师记录失败。', error);
+    console.error('删除记录失败。', error);
     response.status(500).json({ error: '删除记录失败。' });
   }
 });
 
-router.get('/statistics', authMiddleware, teacherOnly, (_request, response) => {
+// --- Students ---
+
+router.get('/students', authMiddleware, teacherOrAdmin, (request, response) => {
   try {
-    response.json({ statistics: database.getStatistics() });
+    const students = request.user!.role === 'admin'
+      ? database.getAllStudents()
+      : database.getTeacherStudents(request.user!.id);
+    response.json({ students });
+  } catch (error) {
+    console.error('加载学生列表失败。', error);
+    response.status(500).json({ error: '加载学生列表失败。' });
+  }
+});
+
+router.get('/students/:id/records', authMiddleware, teacherOrAdmin, (request, response) => {
+  try {
+    const records = database.getRecordsByStudent(Number(request.params.id));
+    response.json({ records });
+  } catch (error) {
+    console.error('加载学生记录失败。', error);
+    response.status(500).json({ error: '加载记录失败。' });
+  }
+});
+
+router.put('/students/:id', authMiddleware, teacherOrAdmin, (request, response) => {
+  const studentId = Number(request.params.id);
+  const student = database.findUserById(studentId);
+
+  if (!student || student.role !== 'student') {
+    response.status(404).json({ error: '学生不存在。' });
+    return;
+  }
+
+  // Teacher can only manage assigned students
+  if (request.user!.role === 'teacher') {
+    const assigned = database.getTeacherStudents(request.user!.id);
+    if (!assigned.some((s) => s.id === studentId)) {
+      response.status(403).json({ error: '无权管理该学生。' });
+      return;
+    }
+  }
+
+  try {
+    const name = typeof request.body.name === 'string' ? request.body.name.trim() : '';
+    const newPassword = typeof request.body.password === 'string' ? request.body.password : '';
+
+    if (name) database.updateUserName(studentId, name);
+    if (newPassword) {
+      if (newPassword.length < 8) {
+        response.status(400).json({ error: '密码至少需要8位。' });
+        return;
+      }
+      database.updateUserPassword(studentId, bcrypt.hashSync(newPassword, 10));
+    }
+
+    response.json({ message: '学生信息更新成功。' });
+  } catch (error) {
+    console.error('更新学生信息失败。', error);
+    response.status(500).json({ error: '更新学生信息失败。' });
+  }
+});
+
+// --- Statistics ---
+
+router.get('/statistics', authMiddleware, teacherOrAdmin, (request, response) => {
+  try {
+    const studentIds = getVisibleStudentIds(request.user!.id, request.user!.role);
+    response.json({ statistics: database.getStatistics(studentIds) });
   } catch (error) {
     console.error('加载统计数据失败。', error);
     response.status(500).json({ error: '加载统计数据失败。' });

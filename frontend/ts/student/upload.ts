@@ -1,7 +1,7 @@
+import { renderSidebar } from '../components/sidebar';
 import {
   API_URL,
   logout,
-  populateUserSummary,
   readJson,
   requireElement,
   requireRole,
@@ -34,6 +34,8 @@ interface CreateRecordResponse extends ApiError {
 }
 
 const session = requireRole('student', '../login.html');
+if (session) renderSidebar({ role: 'student', activePath: 'upload.html', user: session.user });
+
 
 if (session) {
   const logoutButton = requireElement<HTMLButtonElement>('#logout-button');
@@ -53,8 +55,7 @@ if (session) {
 
   let selectedImage: File | null = null;
 
-  populateUserSummary('#user-name', '#user-avatar', session.user);
-  logoutButton.addEventListener('click', () => logout('../login.html'));
+    logoutButton.addEventListener('click', () => logout('../login.html'));
 
   const now = new Date();
   practiceDateInput.valueAsDate = now;

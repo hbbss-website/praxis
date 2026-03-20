@@ -19,10 +19,7 @@ export const authMiddleware: RequestHandler = (request, response, next: NextFunc
   const token = authHeader.slice('Bearer '.length);
 
   try {
-    const decoded = jwt.verify(token, jwtSecret, {
-      audience: jwtAudience,
-      issuer: jwtIssuer
-    });
+    const decoded = jwt.verify(token, jwtSecret, { audience: jwtAudience, issuer: jwtIssuer });
 
     if (!decoded || typeof decoded === 'string') {
       sendAuthError(response, 401, '认证令牌无效。');
@@ -36,16 +33,17 @@ export const authMiddleware: RequestHandler = (request, response, next: NextFunc
   }
 };
 
-function requireRole(role: UserRole): RequestHandler {
+function requireRole(...roles: UserRole[]): RequestHandler {
   return (request, response, next) => {
-    if (request.user?.role !== role) {
-      sendAuthError(response, 403, role === 'teacher' ? '只有教师可以访问该资源。' : '只有学生可以访问该资源。');
+    if (!request.user || !roles.includes(request.user.role)) {
+      sendAuthError(response, 403, '没有权限访问该资源。');
       return;
     }
-
     next();
   };
 }
 
+export const adminOnly = requireRole('admin');
 export const teacherOnly = requireRole('teacher');
+export const teacherOrAdmin = requireRole('teacher', 'admin');
 export const studentOnly = requireRole('student');

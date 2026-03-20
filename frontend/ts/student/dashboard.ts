@@ -1,10 +1,10 @@
+import { renderSidebar } from '../components/sidebar';
 import {
   API_URL,
   escapeHtml,
   formatDate,
   getApiOrigin,
   logout,
-  populateUserSummary,
   readJson,
   requireElement,
   requireRole,
@@ -25,7 +25,7 @@ interface StudentRecord {
   status: RecordStatus;
   teacher_comment: string | null;
   updated_at: string;
-  updated_by_username: string | null;
+  updated_by_uid: string | null;
 }
 
 interface RecordStatistics {
@@ -42,6 +42,8 @@ interface StudentRecordsResponse extends ApiError {
 }
 
 const session = requireRole('student', '../login.html');
+if (session) renderSidebar({ role: 'student', activePath: 'dashboard.html', user: session.user });
+
 
 if (session) {
   const logoutButton = requireElement<HTMLButtonElement>('#logout-button');
@@ -51,8 +53,7 @@ if (session) {
   const pendingCount = requireElement<HTMLElement>('#pending-count');
   const approvedCount = requireElement<HTMLElement>('#approved-count');
 
-  populateUserSummary('#user-name', '#user-avatar', session.user);
-  logoutButton.addEventListener('click', () => logout('../login.html'));
+    logoutButton.addEventListener('click', () => logout('../login.html'));
 
   recordsContainer.addEventListener('click', (event) => {
     const target = event.target as Element | null;
@@ -224,9 +225,9 @@ function renderRecords(container: HTMLElement, records: StudentRecord[]): void {
                   </div>
                 </div>
                 ${
-                  record.updated_by_username
+                  record.updated_by_uid
                     ? `<div class="record-edited-info">
-                        ${escapeHtml(record.updated_by_username)} 修改于 ${formatDate(record.updated_at, '-')}
+                        ${escapeHtml(record.updated_by_uid)} 修改于 ${formatDate(record.updated_at, '-')}
                        </div>`
                     : ''
                 }

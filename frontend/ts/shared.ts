@@ -2,11 +2,11 @@ export const API_URL = 'http://localhost:3000/api';
 const tokenStorageKey = 'auth.token';
 const userStorageKey = 'auth.user';
 
-export type UserRole = 'student' | 'teacher';
+export type UserRole = 'admin' | 'teacher' | 'student';
 
 export interface StoredUser {
   id: number;
-  username: string;
+  uid: string;
   role: UserRole;
   name: string;
 }
@@ -17,39 +17,23 @@ export interface ApiError {
 
 export function requireElement<ElementType extends Element>(selector: string): ElementType {
   const element = document.querySelector<ElementType>(selector);
-
-  if (!element) {
-    throw new Error(`Missing required element: ${selector}`);
-  }
-
+  if (!element) throw new Error(`Missing required element: ${selector}`);
   return element;
 }
 
 export function getStoredUser(): StoredUser | null {
   const rawUser = sessionStorage.getItem(userStorageKey);
-
-  if (!rawUser) {
-    return null;
-  }
+  if (!rawUser) return null;
 
   try {
     const user = JSON.parse(rawUser) as Partial<StoredUser>;
-
     if (
       typeof user.id !== 'number' ||
-      typeof user.username !== 'string' ||
-      (user.role !== 'student' && user.role !== 'teacher') ||
+      typeof user.uid !== 'string' ||
+      (user.role !== 'student' && user.role !== 'teacher' && user.role !== 'admin') ||
       typeof user.name !== 'string'
-    ) {
-      return null;
-    }
-
-    return {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      name: user.name
-    };
+    ) return null;
+    return { id: user.id, uid: user.uid, role: user.role, name: user.name };
   } catch {
     return null;
   }
@@ -75,7 +59,12 @@ export function logout(redirectPath: string): void {
 }
 
 export function redirectByRole(role: UserRole): void {
-  window.location.href = role === 'teacher' ? 'teacher/dashboard.html' : 'student/dashboard.html';
+  const paths: Record<UserRole, string> = {
+    admin: 'admin/records.html',
+    teacher: 'teacher/dashboard.html',
+    student: 'student/dashboard.html'
+  };
+  window.location.href = paths[role];
 }
 
 export function requireRole(
@@ -85,7 +74,10 @@ export function requireRole(
   const token = getToken();
   const user = getStoredUser();
 
-  if (!token || !user || user.role !== expectedRole) {
+  if (!token || !user) { logout(loginPath); return null; }
+
+  // Admin can access teacher pages
+  if (user.role !== expectedRole && !(expectedRole === 'teacher' && user.role === 'admin')) {
     logout(loginPath);
     return null;
   }
@@ -93,38 +85,20 @@ export function requireRole(
   return { token, user };
 }
 
-export function populateUserSummary(nameSelector: string, avatarSelector: string, user: StoredUser): void {
-  const nameElement = requireElement<HTMLElement>(nameSelector);
-  const avatarElement = requireElement<HTMLElement>(avatarSelector);
-  const displayName = user.name || user.username;
-
-  nameElement.textContent = displayName;
-  avatarElement.textContent = displayName.charAt(0).toUpperCase();
-}
-
 export function escapeHtml(value: string | null | undefined): string {
-  if (!value) {
-    return '';
-  }
-
+  if (!value) return '';
   const element = document.createElement('div');
   element.textContent = value;
   return element.innerHTML;
 }
 
 export function formatDate(value: string | null | undefined, fallback = ''): string {
-  if (!value) {
-    return fallback;
-  }
-
+  if (!value) return fallback;
   return new Date(value).toLocaleDateString('sv-SE');
 }
 
 export function formatDateTime(value: string | null | undefined, fallback = '-'): string {
-  if (!value) {
-    return fallback;
-  }
-
+  if (!value) return fallback;
   return new Date(value).toLocaleString('sv-SE');
 }
 
@@ -145,7 +119,6 @@ export async function updateNotificationBadge(token: string): Promise<void> {
     const response = await fetch(`${API_URL}/student/notifications`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-
     if (!response.ok) return;
 
     const data = await readJson<{ unreadCount: number }>(response);
@@ -159,4 +132,3 @@ export async function updateNotificationBadge(token: string): Promise<void> {
     console.error('Failed to load notification count', error);
   }
 }
-

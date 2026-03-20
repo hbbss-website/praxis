@@ -1,9 +1,9 @@
+import { renderSidebar } from '../components/sidebar';
 import {
   API_URL,
   escapeHtml,
   formatDateTime,
   logout,
-  populateUserSummary,
   readJson,
   requireElement,
   requireRole,
@@ -26,13 +26,14 @@ interface NotificationsResponse extends ApiError {
 }
 
 const session = requireRole('student', '../login.html');
+if (session) renderSidebar({ role: 'student', activePath: 'notifications.html', user: session.user });
+
 
 if (session) {
   const logoutButton = requireElement<HTMLButtonElement>('#logout-button');
   const notificationsContainer = requireElement<HTMLElement>('#notifications-container');
 
-  populateUserSummary('#user-name', '#user-avatar', session.user);
-  logoutButton.addEventListener('click', () => logout('../login.html'));
+    logoutButton.addEventListener('click', () => logout('../login.html'));
 
   void loadNotifications(session.token, notificationsContainer);
 }

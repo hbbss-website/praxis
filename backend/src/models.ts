@@ -1,4 +1,4 @@
-export type UserRole = 'student' | 'teacher';
+export type UserRole = 'admin' | 'teacher' | 'student';
 
 export type RecordStatus = 'approved' | 'pending' | 'rejected';
 
@@ -15,7 +15,7 @@ export interface AppNotification {
 
 export interface User {
   id: number;
-  username: string;
+  uid: string;
   password: string;
   role: UserRole;
   name: string;
@@ -24,7 +24,7 @@ export interface User {
 
 export interface PublicUser {
   id: number;
-  username: string;
+  uid: string;
   role: UserRole;
   name: string;
 }
@@ -47,7 +47,7 @@ export interface PracticeRecord {
   teacher_comment: string | null;
   created_at: string;
   updated_at: string;
-  updated_by_username: string | null;
+  updated_by_uid: string | null;
 }
 
 export interface StudentRecord extends PracticeRecord {
@@ -55,7 +55,7 @@ export interface StudentRecord extends PracticeRecord {
 }
 
 export interface TeacherRecord extends StudentRecord {
-  student_username: string;
+  student_uid: string;
 }
 
 export interface CreateRecordInput {
@@ -77,12 +77,16 @@ export interface UpdateRecordInput {
   image_path?: string | null;
   status?: RecordStatus;
   teacher_comment?: string | null;
-  updated_by_username?: string | null;
+  updated_by_uid?: string | null;
 }
 
 export interface RecordFilters {
   student_id?: number | string | null;
   status?: RecordStatus | string | null;
+  created_after?: string | null;
+  created_before?: string | null;
+  updated_after?: string | null;
+  updated_before?: string | null;
 }
 
 export interface RecordStatistics {
@@ -93,13 +97,32 @@ export interface RecordStatistics {
   total_duration: number;
 }
 
+export interface TeacherStudentAssignment {
+  teacher_id: number;
+  student_id: number;
+}
+
+export interface CreateUserResult {
+  id: number;
+  uid: string;
+  name: string;
+  role: UserRole;
+  password: string; // plaintext, only returned on creation
+}
+
 export interface DatabaseState {
   users: User[];
   practice_records: PracticeRecord[];
   notifications: AppNotification[];
+  teacher_students: TeacherStudentAssignment[];
   nextId: {
     users: number;
     practice_records: number;
     notifications: number;
+  };
+  nextUidNumber: {
+    admin: number;
+    teacher: number;
+    student: number;
   };
 }

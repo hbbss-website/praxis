@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>添加用户 - 管理中心</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar"></aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1>添加用户</h1>
+                <p>创建单个用户、批量导入或从 CSV 导入用户。</p>
+            </div>
+
+            <div class="card" style="max-width: 700px;">
+                <div class="card-header">
+                    <h3 class="card-title">创建单个用户</h3>
+                </div>
+                <div style="padding: 20px;">
+                    <div class="error-message" id="create-error"></div>
+                    <div class="success-message" id="create-success"
+                        style="display: none; background: #d1fae5; color: #065f46; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;">
+                    </div>
+                    <form id="create-form">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div class="form-group"><label for="create-name">姓名</label><input type="text"
+                                    id="create-name" required></div>
+                            <div class="form-group">
+                                <label for="create-role">角色</label>
+                                <select id="create-role" required>
+                                    <option value="student">学生</option>
+                                    <option value="teacher">教师</option>
+                                    <option value="admin">管理员</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="create-btn">创建</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card" style="max-width: 700px; margin-top: 20px;">
+                <div class="card-header">
+                    <h3 class="card-title">CSV 导入</h3>
+                </div>
+                <div style="padding: 20px;">
+                    <p style="margin-bottom: 12px; color: var(--gray-600);">格式：每行 <code>姓名,角色</code>，无表头，角色可选
+                        student/teacher/admin。文件不超过 50 MiB。</p>
+                    <input type="file" id="csv-input" accept=".csv,text/csv" style="margin-bottom: 12px;">
+                    <div class="error-message" id="csv-error"></div>
+                    <div id="csv-preview" style="max-height: 300px; overflow: auto; margin-bottom: 12px;"></div>
+                    <button class="btn btn-primary" id="csv-import-btn" type="button"
+                        style="display: none;">确认导入</button>
+                    <div id="csv-result" style="margin-top: 16px;"></div>
+                </div>
+            </div>
+
+            <div class="card" style="max-width: 700px; margin-top: 20px;">
+                <div class="card-header">
+                    <h3 class="card-title">批量创建</h3>
+                </div>
+                <div style="padding: 20px;">
+                    <div id="batch-create-container">
+                        <div class="batch-entry"
+                            style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; margin-bottom: 8px;">
+                            <input type="text" placeholder="姓名" class="batch-name">
+                            <select class="batch-role">
+                                <option value="student">学生</option>
+                                <option value="teacher">教师</option>
+                                <option value="admin">管理员</option>
+                            </select>
+                            <button class="btn btn-sm btn-danger batch-remove" type="button">×</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 12px;">
+                        <button class="btn btn-secondary btn-sm" id="batch-add-row" type="button">添加一行</button>
+                        <button class="btn btn-primary btn-sm" id="batch-create-btn" type="button">批量创建</button>
+                    </div>
+                    <div class="error-message" id="batch-create-error"></div>
+                    <div id="batch-create-result" style="margin-top: 16px;"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="../js/admin/users.js"></script>
+</body>
+
+</html>
