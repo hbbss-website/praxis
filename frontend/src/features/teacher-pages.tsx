@@ -656,7 +656,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function LoadingCard({ label }: { label: string }) {
   return (
     <Card>
-      <CardContent className="flex min-h-52 items-center justify-center gap-3 text-sm text-[color:var(--muted-foreground)]">
+      <CardContent className="flex min-h-52 items-center justify-center gap-3 p-6 text-sm text-[color:var(--muted-foreground)]">
         <LoaderCircle className="size-4 animate-spin" />
         {label}
       </CardContent>
@@ -667,7 +667,7 @@ function LoadingCard({ label }: { label: string }) {
 function ErrorCard({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <Card>
-      <CardContent className="flex min-h-52 flex-col items-center justify-center gap-4 text-center">
+      <CardContent className="flex min-h-52 flex-col items-center justify-center gap-4 p-6 text-center">
         <p className="text-sm text-rose-700">{message}</p>
         {onRetry ? <Button variant="secondary" onClick={onRetry}>重新加载</Button> : null}
       </CardContent>

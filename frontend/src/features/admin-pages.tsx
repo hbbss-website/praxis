@@ -99,7 +99,6 @@ export function AdminUsersPage() {
                   <UserPlus className="size-4" />
                   创建账号
                 </Button>
-                {teachers.length ? <p className="self-center text-sm text-[color:var(--muted-foreground)]">可用教师：{teachers.map((teacher) => teacher.uid).join(' / ')}</p> : null}
               </div>
               {error ? <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p> : null}
               {singleResult ? <ResultTable users={[singleResult]} filename="created_user.csv" /> : null}

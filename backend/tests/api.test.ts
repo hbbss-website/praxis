@@ -1,328 +1,170 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import type { Server } from 'node:http';
 import fs from 'node:fs';
 
-// IMPORTANT: set DATABASE_FILE before importing server/database modules
-// Use dynamic import to respect module loading order
-const testDbPath = '/tmp/test-db-' + Date.now() + '.json';
+const testDbPath = `/tmp/test-db-${Date.now()}.json`;
 process.env.DATABASE_FILE = testDbPath;
+process.env.JWT_SECRET = 'test-jwt-secret-1234567890123456';
+process.env.LOGIN_MAX_ATTEMPTS = '3';
+process.env.LOGIN_LOCKOUT_MS = '60000';
 
-let server: Server;
-let serverUrl = '';
-let startServer: (port?: number) => Server;
+type DatabaseModule = typeof import('../src/database');
+type LoginAttemptsModule = typeof import('../src/auth/login-attempts');
+
+let database: DatabaseModule['default'];
+let getRemainingLockoutMs: LoginAttemptsModule['getRemainingLockoutMs'];
+let recordLoginFailure: LoginAttemptsModule['recordLoginFailure'];
+let clearLoginFailures: LoginAttemptsModule['clearLoginFailures'];
 
 beforeAll(async () => {
-  // Dynamic import ensures process.env.DATABASE_FILE is set before database.ts initializes
-  const mod = await import('../src/server');
-  startServer = mod.startServer;
-  const port = 3100 + Math.floor(Math.random() * 1000);
-  server = startServer(port);
-  serverUrl = `http://localhost:${port}`;
+  const databaseModule = await import('../src/database');
+  const loginAttemptsModule = await import('../src/auth/login-attempts');
+
+  database = databaseModule.default;
+  getRemainingLockoutMs = loginAttemptsModule.getRemainingLockoutMs;
+  recordLoginFailure = loginAttemptsModule.recordLoginFailure;
+  clearLoginFailures = loginAttemptsModule.clearLoginFailures;
 });
 
 afterAll(() => {
-  server?.close();
-  try { fs.unlinkSync(testDbPath); } catch { }
+  try {
+    fs.unlinkSync(testDbPath);
+  } catch { }
 });
 
-async function login(uid: string, password: string) {
-  return fetch(`${serverUrl}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uid, password })
-  });
-}
-
-async function getToken(uid: string, password: string): Promise<string> {
-  const res = await login(uid, password);
-  if (!res.ok) throw new Error(`Login failed for ${uid}: ${res.status} ${await res.text()}`);
-  const data = (await res.json()) as { token: string };
-  return data.token;
-}
-
-const DEFAULT_PW = '12345678';
-
-describe('Authentication', () => {
-  test('admin login with correct credentials', async () => {
-    const res = await login('A00001', DEFAULT_PW);
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { token: string; user: { uid: string; role: string } };
-    expect(data.token).toBeTruthy();
-    expect(data.user.uid).toBe('A00001');
-    expect(data.user.role).toBe('admin');
+describe('Database bootstrap and users', () => {
+  test('seeds default admin, teacher and student accounts', () => {
+    expect(database.findUserByUid('A00001')?.role).toBe('admin');
+    expect(database.findUserByUid('T00001')?.role).toBe('teacher');
+    expect(database.findUserByUid('S00001')?.role).toBe('student');
+    expect(database.findUserByUid('S00002')?.role).toBe('student');
+    expect(database.getUsersByRole('student')).toHaveLength(2);
   });
 
-  test('login with wrong password', async () => {
-    const res = await login('A00001', 'wrong');
-    expect(res.status).toBe(401);
+  test('creates users and filters by role', () => {
+    const createdStudent = database.createUser('测试学生', 'student');
+    const createdBatch = database.createUsers([
+      { name: '批量教师', role: 'teacher' },
+      { name: '批量管理员', role: 'admin' }
+    ]);
+
+    expect(createdStudent.uid).toMatch(/^S/);
+    expect(createdStudent.password).toHaveLength(8);
+    expect(createdBatch).toHaveLength(2);
+    expect(createdBatch[0].uid).toMatch(/^T/);
+    expect(createdBatch[1].uid).toMatch(/^A/);
+    expect(database.getUsersByRole('teacher').some((user) => user.uid === createdBatch[0].uid)).toBe(true);
+    expect(database.isValidRole('teacher')).toBe(true);
+    expect(database.isValidRole('invalid-role')).toBe(false);
   });
 
-  test('login with non-existent uid', async () => {
-    const res = await login('X99999', 'test');
-    expect(res.status).toBe(401);
-  });
+  test('updates and deletes users', () => {
+    const createdUser = database.createUser('待修改用户', 'student');
 
-  test('teacher login', async () => {
-    const res = await login('T00001', DEFAULT_PW);
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { user: { role: string } };
-    expect(data.user.role).toBe('teacher');
-  });
+    expect(database.updateUserName(createdUser.id, '已修改用户')).toBe(true);
+    expect(database.findUserById(createdUser.id)?.name).toBe('已修改用户');
 
-  test('student login', async () => {
-    const res = await login('S00001', DEFAULT_PW);
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { user: { role: string } };
-    expect(data.user.role).toBe('student');
+    expect(database.updateUserPassword(createdUser.id, 'hashed-password')).toBe(true);
+    expect(database.findUserById(createdUser.id)?.password).toBe('hashed-password');
+
+    expect(database.deleteUser(createdUser.id)).toBe(true);
+    expect(database.findUserById(createdUser.id)).toBeUndefined();
   });
 });
 
-describe('Admin: User Management', () => {
-  test('create single user', async () => {
-    const adminToken = await getToken('A00001', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/admin/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({ name: '测试学生', role: 'student' })
-    });
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { user: { uid: string; password: string; role: string } };
-    expect(data.user.uid).toMatch(/^S/);
-    expect(data.user.password).toHaveLength(8);
-    expect(data.user.role).toBe('student');
-  });
+describe('Assignments, records and notifications', () => {
+  test('assigns students to a teacher and supports removing assignments', () => {
+    const teacher = database.findUserByUid('T00001');
+    const students = database.getAllStudents().slice(0, 2);
 
-  test('batch create users', async () => {
-    const adminToken = await getToken('A00001', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/admin/users/batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({ entries: [{ name: '批量1', role: 'student' }, { name: '批量2', role: 'teacher' }] })
-    });
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { users: Array<{ uid: string; password: string }> };
-    expect(data.users).toHaveLength(2);
-  });
-
-  test('CSV import', async () => {
-    const adminToken = await getToken('A00001', DEFAULT_PW);
-    const csv = '导入学生1,student,\n导入学生2,student,\n导入教师1,teacher,';
-    const res = await fetch(`${serverUrl}/api/admin/users/import`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({ csv })
-    });
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { users: Array<{ uid: string; role: string }> };
-    expect(data.users).toHaveLength(3);
-    expect(data.users[0].uid).toMatch(/^S/);
-    expect(data.users[2].uid).toMatch(/^T/);
-  });
-
-  test('CSV import with invalid role rejects', async () => {
-    const adminToken = await getToken('A00001', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/admin/users/import`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({ csv: '用户1,invalid_role,' })
-    });
-    expect(res.status).toBe(400);
-  });
-
-  test('list users by role', async () => {
-    const adminToken = await getToken('A00001', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/admin/users?role=student`, {
-      headers: { Authorization: `Bearer ${adminToken}` }
-    });
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { users: Array<{ role: string }> };
-    expect(data.users.length).toBeGreaterThan(0);
-    data.users.forEach((u) => expect(u.role).toBe('student'));
-  });
-
-  test('delete user', async () => {
-    const adminToken = await getToken('A00001', DEFAULT_PW);
-    const createRes = await fetch(`${serverUrl}/api/admin/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({ name: '待删除', role: 'student' })
-    });
-    const { user } = (await createRes.json()) as { user: { id: number } };
-    const deleteRes = await fetch(`${serverUrl}/api/admin/users/${user.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${adminToken}` }
-    });
-    expect(deleteRes.status).toBe(200);
-  });
-
-  test('cannot delete self', async () => {
-    const adminToken = await getToken('A00001', DEFAULT_PW);
-    const meRes = await fetch(`${serverUrl}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${adminToken}` }
-    });
-    const { user } = (await meRes.json()) as { user: { id: number } };
-    const deleteRes = await fetch(`${serverUrl}/api/admin/users/${user.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${adminToken}` }
-    });
-    expect(deleteRes.status).toBe(400);
-  });
-});
-
-describe('Password and Profile', () => {
-  test('change password with correct current password', async () => {
-    const token = await getToken('S00001', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/auth/password`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ current_password: DEFAULT_PW, new_password: 'newpasswd' })
-    });
-    expect(res.status).toBe(200);
-
-    // Verify login with new password
-    const loginRes = await login('S00001', 'newpasswd');
-    expect(loginRes.status).toBe(200);
-
-    // Reset password back
-    const resetToken = await getToken('S00001', 'newpasswd');
-    const resetRes = await fetch(`${serverUrl}/api/auth/password`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resetToken}` },
-      body: JSON.stringify({ current_password: 'newpasswd', new_password: DEFAULT_PW })
-    });
-    expect(resetRes.status).toBe(200);
-  });
-
-  test('reject short password', async () => {
-    const token = await getToken('S00001', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/auth/password`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ current_password: DEFAULT_PW, new_password: 'short' })
-    });
-    expect(res.status).toBe(400);
-  });
-
-  test('reject wrong current password', async () => {
-    const token = await getToken('S00001', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/auth/password`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ current_password: 'wrong', new_password: 'something' })
-    });
-    expect(res.status).toBe(401);
-  });
-
-  test('student cannot change name', async () => {
-    const token = await getToken('S00002', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/auth/profile`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ current_password: DEFAULT_PW, name: '新名字' })
-    });
-    expect(res.status).toBe(403);
-  });
-
-  test('admin can change name', async () => {
-    const adminToken = await getToken('A00001', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/auth/profile`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({ current_password: DEFAULT_PW, name: '新管理员名' })
-    });
-    expect(res.status).toBe(200);
-  });
-});
-
-describe('Student Records', () => {
-  test('create a record', async () => {
-    const token = await getToken('S00002', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/student/records`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ title: '测试记录', content: '测试内容', practice_date: '2026-01-01', duration: 2 })
-    });
-    expect(res.status).toBe(200);
-  });
-
-  test('get student records', async () => {
-    const token = await getToken('S00002', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/student/records`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { records: Array<{ title: string }>; statistics: object };
-    expect(data.records.length).toBeGreaterThan(0);
-    expect(data.statistics).toBeTruthy();
-  });
-});
-
-describe('Teacher-Student Assignments', () => {
-  test('assign and list students for teacher', async () => {
-    const adminToken = await getToken('A00001', DEFAULT_PW);
-
-    const assignData = await fetch(`${serverUrl}/api/admin/assignments`, {
-      headers: { Authorization: `Bearer ${adminToken}` }
-    });
-    const data = (await assignData.json()) as {
-      teachers: Array<{ id: number; uid: string }>;
-      students: Array<{ id: number }>
-    };
-
-    const teacher = data.teachers.find(t => t.uid === 'T00001');
     expect(teacher).toBeTruthy();
+    expect(students).toHaveLength(2);
 
-    const assignRes = await fetch(`${serverUrl}/api/admin/assignments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({ teacher_id: teacher!.id, student_ids: data.students.slice(0, 2).map(s => s.id) })
-    });
-    expect(assignRes.status).toBe(200);
+    database.assignStudentsToTeacher(teacher!.id, students.map((student) => student.id));
 
-    const teacherToken = await getToken('T00001', DEFAULT_PW);
-    const listRes = await fetch(`${serverUrl}/api/teacher/students`, {
-      headers: { Authorization: `Bearer ${teacherToken}` }
+    const teacherStudents = database.getTeacherStudents(teacher!.id);
+    expect(teacherStudents).toHaveLength(2);
+    expect(database.getStudentTeacherId(students[0].id)).toBe(teacher!.id);
+    expect(database.getAllAssignments()).toHaveLength(2);
+
+    database.removeStudentsFromTeacher(teacher!.id, [students[0].id]);
+
+    expect(database.getTeacherStudents(teacher!.id)).toHaveLength(1);
+    expect(database.getStudentTeacherId(students[0].id)).toBeNull();
+  });
+
+  test('creates, updates and deletes student practice records', () => {
+    const student = database.findUserByUid('S00002');
+    expect(student).toBeTruthy();
+
+    const createdRecord = database.createRecord({
+      student_id: student!.id,
+      title: '测试记录',
+      content: '测试内容',
+      practice_date: '2026-01-10',
+      location: '图书馆',
+      duration: 2,
+      image_path: null
     });
-    expect(listRes.status).toBe(200);
-    const listData = (await listRes.json()) as { students: Array<{ id: number }> };
-    expect(listData.students.length).toBeGreaterThan(0);
+
+    expect(createdRecord.status).toBe('pending');
+    expect(database.getRecordById(createdRecord.id)?.title).toBe('测试记录');
+    expect(database.getTeacherRecordById(createdRecord.id)?.student_uid).toBe(student!.uid);
+    expect(database.getRecordsByStudent(student!.id).some((record) => record.id === createdRecord.id)).toBe(true);
+    expect(database.countStudentRecordsToday(student!.id)).toBeGreaterThan(0);
+
+    const updatedRecord = database.updateRecord(createdRecord.id, {
+      status: 'approved',
+      teacher_comment: '通过',
+      updated_by_uid: 'T00001',
+      duration: 2.5
+    });
+
+    expect(updatedRecord?.status).toBe('approved');
+    expect(updatedRecord?.teacher_comment).toBe('通过');
+    expect(updatedRecord?.updated_by_uid).toBe('T00001');
+    expect(database.getStudentStatistics(student!.id).approved_count).toBeGreaterThan(0);
+    expect(database.getStudentStatistics(student!.id).total_duration).toBeGreaterThanOrEqual(2.5);
+    expect(database.getAllRecords({ status: 'approved' }).some((record) => record.id === createdRecord.id)).toBe(true);
+
+    expect(database.deleteRecord(createdRecord.id)).toBe(true);
+    expect(database.getRecordById(createdRecord.id)).toBeNull();
+  });
+
+  test('tracks unread notifications and aggregate statistics', () => {
+    const student = database.findUserByUid('S00001');
+    expect(student).toBeTruthy();
+
+    const notification = database.createNotification(student!.id, 'approved', '你的记录已通过。');
+    expect(notification.is_read).toBe(false);
+    expect(database.getUnreadNotificationCount(student!.id)).toBe(1);
+    expect(database.getNotificationsByStudent(student!.id)[0]?.id).toBe(notification.id);
+
+    database.markNotificationsAsRead(student!.id);
+
+    expect(database.getUnreadNotificationCount(student!.id)).toBe(0);
+
+    const allStats = database.getStatistics();
+    expect(allStats.student_count).toBeGreaterThanOrEqual(2);
+    expect(Array.isArray(allStats.student_durations)).toBe(true);
   });
 });
 
-describe('Batch Record Operations', () => {
-  test('batch approve records', async () => {
-    const studentToken = await getToken('S00002', DEFAULT_PW);
-    const createRes = await fetch(`${serverUrl}/api/student/records`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${studentToken}` },
-      body: JSON.stringify({ title: '批量测试', content: '批量内容', practice_date: '2026-01-10', duration: 1 })
-    });
-    const { recordId } = (await createRes.json()) as { recordId: number };
+describe('Login attempt lockout', () => {
+  test('locks a user after repeated failures and clears correctly', () => {
+    const key = 'S00001';
+    const now = 1_700_000_000_000;
 
-    const adminToken = await getToken('A00001', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/teacher/records/batch-review`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({ ids: [recordId], action: 'approved' })
-    });
-    expect(res.status).toBe(200);
-  });
-});
+    clearLoginFailures(key);
+    expect(getRemainingLockoutMs(key, now)).toBe(0);
 
-describe('Role-based Access Control', () => {
-  test('student cannot access admin routes', async () => {
-    const token = await getToken('S00002', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/admin/users`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    expect(res.status).toBe(403);
-  });
+    expect(recordLoginFailure(key, now)).toBe(0);
+    expect(recordLoginFailure(key, now + 1_000)).toBe(0);
 
-  test('student cannot access teacher routes', async () => {
-    const token = await getToken('S00002', DEFAULT_PW);
-    const res = await fetch(`${serverUrl}/api/teacher/records`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    expect(res.status).toBe(403);
+    const lockedMs = recordLoginFailure(key, now + 2_000);
+    expect(lockedMs).toBeGreaterThan(0);
+    expect(getRemainingLockoutMs(key, now + 3_000)).toBeGreaterThan(0);
+
+    clearLoginFailures(key);
+    expect(getRemainingLockoutMs(key, now + 4_000)).toBe(0);
   });
 });

@@ -1,6 +1,7 @@
 import { Bell, BookCopy, ClipboardList, FolderKanban, GraduationCap, LayoutDashboard, LogOut, Settings, ShieldCheck, Upload, Users } from 'lucide-react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useSession } from '@/lib/auth';
@@ -76,12 +77,6 @@ export function AppShell({
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
                 <span className="font-semibold">{user.name}</span>
                 <span className="text-muted-foreground">{user.uid}</span>
-                {user.role === 'student' ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">
-                    <Bell className="size-3.5" />
-                    未读通知 {notificationCount}
-                  </span>
-                ) : null}
               </div>
             </div>
           </Card>
@@ -101,7 +96,12 @@ export function AppShell({
                     )
                   }
                 >
-                  <Icon className="size-4" />
+                  <span className="relative inline-flex shrink-0">
+                    <Icon className="size-4" />
+                    {user.role === 'student' && to === '/student/notifications' ? (
+                      <NotificationBadge count={notificationCount} />
+                    ) : null}
+                  </span>
                   {label}
                 </NavLink>
               ))}
@@ -127,12 +127,6 @@ export function AppShell({
                 <p className="text-sm font-semibold">{user.name}</p>
                 <p className="text-xs text-muted-foreground">{user.uid}</p>
               </div>
-              {user.role === 'student' ? (
-                <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">
-                  <Bell className="size-3.5" />
-                  未读通知 {notificationCount}
-                </div>
-              ) : null}
             </div>
 
             <nav className="flex flex-col gap-2">
@@ -149,7 +143,12 @@ export function AppShell({
                     )
                   }
                 >
-                  <Icon className="size-4" />
+                  <span className="relative inline-flex shrink-0">
+                    <Icon className="size-4" />
+                    {user.role === 'student' && to === '/student/notifications' ? (
+                      <NotificationBadge count={notificationCount} />
+                    ) : null}
+                  </span>
                   {label}
                 </NavLink>
               ))}
@@ -171,5 +170,18 @@ export function AppShell({
         </main>
       </div>
     </div>
+  );
+}
+
+function NotificationBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+
+  return (
+    <Badge
+      variant="destructive"
+      className="pointer-events-none absolute -top-2 -right-2 h-5 min-w-5 justify-center rounded-full px-1 text-[10px] leading-none shadow-sm"
+    >
+      {count > 99 ? '99+' : count}
+    </Badge>
   );
 }
