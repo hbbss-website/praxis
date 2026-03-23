@@ -1,4 +1,4 @@
-import { API_URL, type StoredUser, type UploadResult } from './types';
+import { API_URL, type CsvImportPreview, type StoredUser, type UploadResult } from './types';
 
 export class ApiResponseError extends Error {
   status: number;
@@ -50,6 +50,12 @@ export async function uploadImage(file: File, token: string) {
   const formData = new FormData();
   formData.append('image', file);
   return apiRequest<UploadResult>('/upload', { method: 'POST', body: formData }, token);
+}
+
+export async function previewUserImportCsv(file: File, token: string) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return apiRequest<CsvImportPreview>('/admin/users/import/preview', { method: 'POST', body: formData }, token);
 }
 
 export function getApiOrigin() {

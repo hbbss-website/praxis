@@ -1,10 +1,16 @@
 import bcrypt from 'bcryptjs';
+import multer from 'multer';
 import { Router } from 'express';
 
+import { parseUserImportCsvBuffer, parseUserImportCsvText, type CsvUserImportEntry } from '../csv/user-import';
 import database from '../database';
 import { authMiddleware, adminOnly } from '../middleware/auth';
 
 const router = Router();
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
 
 // --- Single User Creation ---
 
@@ -83,71 +89,50 @@ router.post('/users/batch', authMiddleware, adminOnly, (request, response) => {
 
 // --- CSV Import ---
 
-router.post('/users/import', authMiddleware, adminOnly, (request, response) => {
-  const csvContent = typeof request.body.csv === 'string' ? request.body.csv : '';
-
-  if (!csvContent) {
-    response.status(400).json({ error: 'CSV内容不能为空。' });
-    return;
-  }
-
-  const lines = csvContent.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-
-  if (lines.length === 0) {
-    response.status(400).json({ error: 'CSV没有有效数据。' });
-    return;
-  }
-
-  const validated: Array<{ name: string; role: 'admin' | 'teacher' | 'student'; teacherId: number | null }> = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const parts = lines[i].split(',').map((p: string) => p.trim());
-    if (parts.length < 3) {
-      response.status(400).json({ error: `第 ${i + 1} 行格式无效，即使是老师/管理员最后也应该有个逗号，格式应为 姓名,角色,[管理老师UID]。` });
-      return;
-    }
-
-    const name = parts[0];
-    const role = parts[1];
-    const teacher_uid = parts.length > 2 ? parts[2] : '';
-
-    if (!name) {
-      response.status(400).json({ error: `第 ${i + 1} 行姓名为空。` });
-      return;
-    }
-    if (role !== 'student' && role !== 'teacher' && role !== 'admin') {
-      response.status(400).json({ error: `第 ${i + 1} 行角色无效，只能是 student/teacher/admin。` });
-      return;
-    }
-
-    let teacherId: number | null = null;
-    if (teacher_uid) {
-      if (role !== 'student') {
-        response.status(400).json({ error: `第 ${i + 1} 行错误：非学生该列（管理老师UID）必须留空。` });
-        return;
-      }
-      const teacher = database.findUserByUid(teacher_uid);
-      if (!teacher || teacher.role !== 'teacher') {
-        response.status(400).json({ error: `第 ${i + 1} 行错误：指定的教师 UID ${teacher_uid} 无效或不存在。` });
-        return;
-      }
-      teacherId = teacher.id;
-    }
-
-    validated.push({ name, role, teacherId });
-  }
-
+router.post('/users/import/preview', authMiddleware, adminOnly, csvUpload.single('file'), (request, response) => {
   try {
-    const results = database.createUsers(validated.map(v => ({ name: v.name, role: v.role })));
-    for (let i = 0; i < results.length; i++) {
-        if (validated[i].teacherId && results[i].role === 'student') {
-            database.assignStudentsToTeacher(validated[i].teacherId!, [results[i].id]);
-        }
-    }
-    response.json({ message: `成功导入 ${results.length} 个用户。`, users: results });
+    const parsed = readUserImportCsv(request);
+    const validatedEntries = validateCsvImportEntries(parsed.entries);
+
+    response.json({
+      message: `成功识别 ${parsed.totalCount} 条导入记录。`,
+      encoding: parsed.encoding,
+      totalCount: parsed.totalCount,
+      studentCount: parsed.studentCount,
+      entries: validatedEntries.map((entry) => ({
+        lineNumber: entry.lineNumber,
+        name: entry.name,
+        role: entry.role,
+        teacher_uid: entry.teacher_uid
+      }))
+    });
   } catch (error) {
-    console.error('CSV 导入失败。', error);
-    response.status(500).json({ error: 'CSV 导入失败。' });
+    response.status(400).json({ error: error instanceof Error ? error.message : 'CSV 文件无效。' });
+  }
+});
+
+router.post('/users/import', authMiddleware, adminOnly, csvUpload.single('file'), (request, response) => {
+  try {
+    const parsed = readUserImportCsv(request);
+    const validated = validateCsvImportEntries(parsed.entries);
+    const results = database.createUsers(validated.map((entry) => ({ name: entry.name, role: entry.role })));
+
+    for (let index = 0; index < results.length; index += 1) {
+      if (validated[index].teacherId && results[index].role === 'student') {
+        database.assignStudentsToTeacher(validated[index].teacherId!, [results[index].id]);
+      }
+    }
+
+    response.json({
+      message: `成功导入 ${results.length} 个用户。`,
+      encoding: parsed.encoding,
+      users: results
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'CSV 导入失败。';
+    const statusCode = message.includes('失败') ? 500 : 400;
+    if (statusCode === 500) console.error('CSV 导入失败。', error);
+    response.status(statusCode).json({ error: message });
   }
 });
 
@@ -309,3 +294,42 @@ router.delete('/assignments', authMiddleware, adminOnly, (request, response) => 
 });
 
 export default router;
+
+function readUserImportCsv(request: {
+  file?: Express.Multer.File;
+  body: { csv?: unknown };
+}) {
+  if (request.file) {
+    if (!request.file.originalname.toLowerCase().endsWith('.csv')) {
+      throw new Error('请上传 .csv 文件。');
+    }
+
+    return parseUserImportCsvBuffer(request.file.buffer, { columnCount: 3 });
+  }
+
+  const csvContent = typeof request.body.csv === 'string' ? request.body.csv : '';
+  if (!csvContent.trim()) {
+    throw new Error('CSV 文件不能为空。');
+  }
+
+  return parseUserImportCsvText(csvContent, { columnCount: 3 });
+}
+
+function validateCsvImportEntries(entries: CsvUserImportEntry[]) {
+  return entries.map((entry) => {
+    let teacherId: number | null = null;
+
+    if (entry.teacher_uid) {
+      const teacher = database.findUserByUid(entry.teacher_uid);
+      if (!teacher || teacher.role !== 'teacher') {
+        throw new Error(`第 ${entry.lineNumber} 行错误：指定的教师 UID ${entry.teacher_uid} 无效或不存在。`);
+      }
+      teacherId = teacher.id;
+    }
+
+    return {
+      ...entry,
+      teacherId
+    };
+  });
+}

@@ -9,20 +9,26 @@ process.env.LOGIN_LOCKOUT_MS = '60000';
 
 type DatabaseModule = typeof import('../src/database');
 type LoginAttemptsModule = typeof import('../src/auth/login-attempts');
+type CsvImportModule = typeof import('../src/csv/user-import');
 
 let database: DatabaseModule['default'];
 let getRemainingLockoutMs: LoginAttemptsModule['getRemainingLockoutMs'];
 let recordLoginFailure: LoginAttemptsModule['recordLoginFailure'];
 let clearLoginFailures: LoginAttemptsModule['clearLoginFailures'];
+let parseUserImportCsvBuffer: CsvImportModule['parseUserImportCsvBuffer'];
+let parseUserImportCsvText: CsvImportModule['parseUserImportCsvText'];
 
 beforeAll(async () => {
   const databaseModule = await import('../src/database');
   const loginAttemptsModule = await import('../src/auth/login-attempts');
+  const csvImportModule = await import('../src/csv/user-import');
 
   database = databaseModule.default;
   getRemainingLockoutMs = loginAttemptsModule.getRemainingLockoutMs;
   recordLoginFailure = loginAttemptsModule.recordLoginFailure;
   clearLoginFailures = loginAttemptsModule.clearLoginFailures;
+  parseUserImportCsvBuffer = csvImportModule.parseUserImportCsvBuffer;
+  parseUserImportCsvText = csvImportModule.parseUserImportCsvText;
 });
 
 afterAll(() => {
@@ -166,5 +172,45 @@ describe('Login attempt lockout', () => {
 
     clearLoginFailures(key);
     expect(getRemainingLockoutMs(key, now + 4_000)).toBe(0);
+  });
+});
+
+describe('CSV user import parser', () => {
+  test('parses UTF-8 CSV text content', () => {
+    const parsed = parseUserImportCsvText('张三,student,T00001\n李老师,teacher,\n', { columnCount: 3 });
+
+    expect(parsed.encoding).toBe('utf-8');
+    expect(parsed.totalCount).toBe(2);
+    expect(parsed.studentCount).toBe(1);
+    expect(parsed.entries[0].teacher_uid).toBe('T00001');
+  });
+
+  test('parses UTF-16 CSV buffer', () => {
+    const utf16Buffer = new Uint8Array([
+      0xff, 0xfe,
+      0x20, 0x5f, 0x09, 0x4e, 0x2c, 0x00, 0x73, 0x00, 0x74, 0x00, 0x75, 0x00, 0x64, 0x00, 0x65, 0x00, 0x6e, 0x00, 0x74, 0x00, 0x2c, 0x00, 0x54, 0x00, 0x30, 0x00, 0x30, 0x00, 0x30, 0x00, 0x30, 0x00, 0x31, 0x00, 0x0a, 0x00
+    ]);
+    const parsed = parseUserImportCsvBuffer(utf16Buffer, { columnCount: 3 });
+
+    expect(parsed.encoding).toBe('utf-16');
+    expect(parsed.totalCount).toBe(1);
+    expect(parsed.entries[0].name).toBe('张三');
+  });
+
+  test('parses GBK CSV buffer', () => {
+    const gbkBuffer = new Uint8Array([
+      0xd5, 0xc5, 0xc8, 0xfd, 0x2c, 0x73, 0x74, 0x75, 0x64, 0x65, 0x6e, 0x74,
+      0x2c, 0x54, 0x30, 0x30, 0x30, 0x30, 0x31, 0x0a
+    ]);
+    const parsed = parseUserImportCsvBuffer(gbkBuffer, { columnCount: 3 });
+
+    expect(parsed.encoding).toBe('gbk');
+    expect(parsed.entries[0].name).toBe('张三');
+  });
+
+  test('rejects unsupported or broken CSV encodings', () => {
+    expect(() => parseUserImportCsvBuffer(new Uint8Array([0xff, 0xff, 0xff]), { columnCount: 3 })).toThrow(
+      '无法识别 CSV 文件编码，仅支持 UTF-8、UTF-16 和 GBK。'
+    );
   });
 });

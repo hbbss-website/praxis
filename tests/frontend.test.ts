@@ -31,7 +31,8 @@ test('React 前端继续调用原有后端接口', () => {
       snippets: [
         'fetch(`${API_URL}${path}`',
         "return apiRequest<{ token: string; user: StoredUser }>('/auth/login'",
-        "return apiRequest<UploadResult>('/upload'"
+        "return apiRequest<UploadResult>('/upload'",
+        "return apiRequest<CsvImportPreview>('/admin/users/import/preview'"
       ]
     },
     {
@@ -60,7 +61,6 @@ test('React 前端继续调用原有后端接口', () => {
       file: 'frontend/src/features/admin-pages.tsx',
       snippets: [
         "'/admin/users'",
-        "'/admin/users/import'",
         "'/admin/assignments'"
       ]
     }
@@ -101,6 +101,23 @@ test('管理员用户创建页为不同创建方式拆分错误状态', () => {
   expect(adminUsersPage).toContain('const [csvError, setCsvError] = useState');
   expect(adminUsersPage).toContain('const [batchError, setBatchError] = useState');
   expect(adminUsersPage.includes("const [error, setError] = useState('');")).toBe(false);
+});
+
+test('管理员 CSV 导入页包含示例入口、自动导入和进度条', () => {
+  const adminPagesSource = read('frontend/src/features/admin-pages.tsx');
+  const adminUsersPage = adminPagesSource.slice(
+    adminPagesSource.indexOf('export function AdminUsersPage()'),
+    adminPagesSource.indexOf('export function AdminAssignmentsPage()')
+  );
+
+  expect(adminUsersPage).toContain('previewUserImportCsv(file, token)');
+  expect(adminUsersPage).toContain('选择 CSV 并导入');
+  expect(adminUsersPage).toContain('CsvImportExampleDialog');
+  expect(adminUsersPage).toContain('导入中 ({csvProgressCurrent}/{csvProgressTotal})');
+  expect(adminUsersPage).toContain('accept=".csv,text/csv"');
+
+  const progress = read('frontend/src/components/ui/progress.tsx');
+  expect(progress).toContain('@radix-ui/react-progress');
 });
 
 test('前端构建产物会输出到 frontend/dist', () => {

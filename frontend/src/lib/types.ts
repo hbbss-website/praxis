@@ -93,3 +93,17 @@ export interface CreatedUser {
   role: UserRole;
   password: string;
 }
+
+export interface CsvImportEntry {
+  lineNumber: number;
+  name: string;
+  role: UserRole;
+  teacher_uid: string;
+}
+
+export interface CsvImportPreview {
+  encoding: 'utf-8' | 'utf-16' | 'gbk';
+  totalCount: number;
+  studentCount: number;
+  entries: CsvImportEntry[];
+}

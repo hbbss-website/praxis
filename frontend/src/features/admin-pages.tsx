@@ -1,20 +1,21 @@
-import { ArrowDown, ArrowUp, Download, FileUp, Plus, Trash2, UserPlus } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, Download, FileUp, LoaderCircle, Plus, Trash2, UserPlus } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useSession } from '@/lib/auth';
 import { EmptyState } from '@/shared/empty-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { apiRequest, ApiResponseError } from '@/lib/api';
+import { apiRequest, ApiResponseError, previewUserImportCsv } from '@/lib/api';
 import { formatDateTime, formatDuration } from '@/lib/format';
-import type { Assignment, CreatedUser, StudentSummary, TeacherStatistics, UserRole, UserSummary } from '@/lib/types';
+import type { Assignment, CreatedUser, CsvImportEntry, CsvImportPreview, StudentSummary, TeacherStatistics, UserRole, UserSummary } from '@/lib/types';
 
 function AdminPageFrame({
   title,
@@ -38,14 +39,19 @@ function AdminPageFrame({
 
 export function AdminUsersPage() {
   const { token, signOut } = useSession();
+  const csvInputRef = useRef<HTMLInputElement | null>(null);
   const [teachers, setTeachers] = useState<UserSummary[]>([]);
   const [singleForm, setSingleForm] = useState({ name: '', role: 'student' as UserRole, teacher_uid: '' });
   const [singleResult, setSingleResult] = useState<CreatedUser | null>(null);
   const [singleError, setSingleError] = useState('');
-  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvFileName, setCsvFileName] = useState('');
+  const [csvEncoding, setCsvEncoding] = useState<CsvImportPreview['encoding'] | null>(null);
   const [csvResult, setCsvResult] = useState<CreatedUser[]>([]);
   const [csvError, setCsvError] = useState('');
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvProgressCurrent, setCsvProgressCurrent] = useState(0);
+  const [csvProgressTotal, setCsvProgressTotal] = useState(0);
+  const [csvProgressStudentCount, setCsvProgressStudentCount] = useState(0);
   const [batchEntries, setBatchEntries] = useState([{ name: '', role: 'student' as UserRole, teacher_uid: '' }]);
   const [batchResult, setBatchResult] = useState<CreatedUser[]>([]);
   const [batchError, setBatchError] = useState('');
@@ -58,6 +64,9 @@ export function AdminUsersPage() {
         if (nextError instanceof ApiResponseError && nextError.status === 401) signOut();
       });
   }, [token]);
+
+  const showCsvProgress = csvImporting && csvProgressStudentCount > 10 && csvProgressTotal > 0;
+  const csvProgressValue = csvProgressTotal > 0 ? Math.round((csvProgressCurrent / csvProgressTotal) * 100) : 0;
 
   return (
     <AdminPageFrame title="用户创建" description="管理员可以单个创建、批量填写或导入 CSV 创建账号，并下载生成结果。">
@@ -111,76 +120,86 @@ export function AdminUsersPage() {
         <TabsContent value="csv" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>CSV 导入</CardTitle>
-              <CardDescription>每行格式为 `姓名,角色,管理老师UID`，即使教师或管理员也要保留最后一个逗号。</CardDescription>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1.5">
+                  <CardTitle>CSV 导入</CardTitle>
+                  <CardDescription>不包含表头，格式参见<CsvImportExampleDialog />。支持 UTF-8、UTF-16 和 GBK 编码。</CardDescription>
+                </div>
+                <CsvImportExampleDialog />
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Input
+              <input
+                ref={csvInputRef}
+                className="hidden"
                 type="file"
                 accept=".csv,text/csv"
                 onChange={async (event) => {
+                  if (!token) return;
+
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+
                   setCsvError('');
                   setCsvResult([]);
-                  const file = event.target.files?.[0];
-                  if (!file) {
-                    setCsvFile(null);
-                    setCsvFileName('');
-                    return;
-                  }
+                  setCsvFileName('');
+                  setCsvEncoding(null);
+                  setCsvProgressCurrent(0);
+                  setCsvProgressTotal(0);
+                  setCsvProgressStudentCount(0);
+
                   if (file.size > 50 * 1024 * 1024) {
                     setCsvError('CSV 文件不能超过 50 MiB。');
                     event.currentTarget.value = '';
-                    setCsvFile(null);
-                    setCsvFileName('');
                     return;
                   }
+
                   if (!file.name.toLowerCase().endsWith('.csv')) {
                     setCsvError('请上传 .csv 文件。');
                     event.currentTarget.value = '';
-                    setCsvFile(null);
-                    setCsvFileName('');
                     return;
                   }
 
                   try {
-                    const content = await file.text();
-                    validateCsvContent(content);
-                    setCsvFile(file);
+                    setCsvImporting(true);
+                    const preview = await previewUserImportCsv(file, token);
+                    setCsvProgressTotal(preview.totalCount);
+                    setCsvProgressStudentCount(preview.studentCount);
+                    await importCsvEntries(preview.entries, preview, file.name, token, signOut, setCsvProgressCurrent, setCsvResult);
                     setCsvFileName(file.name);
-                  } catch (nextError) {
-                    setCsvError(nextError instanceof Error ? nextError.message : 'CSV 文件无效。');
-                    event.currentTarget.value = '';
-                    setCsvFile(null);
-                    setCsvFileName('');
-                  }
-                }}
-              />
-              {csvFileName ? <p className="text-sm text-muted-foreground">已选择文件：{csvFileName}</p> : null}
-              <Button
-                onClick={async () => {
-                  if (!token) return;
-                  setCsvError('');
-                  if (!csvFile) {
-                    setCsvError('请先选择一个 CSV 文件。');
-                    return;
-                  }
-                  try {
-                    const csv = await csvFile.text();
-                    validateCsvContent(csv);
-                    const data = await apiRequest<{ users: CreatedUser[] }>('/admin/users/import', { method: 'POST', body: JSON.stringify({ csv }) }, token);
-                    setCsvResult(data.users);
+                    setCsvEncoding(preview.encoding);
                   } catch (nextError) {
                     if (nextError instanceof ApiResponseError && nextError.status === 401) {
                       signOut();
                       return;
                     }
                     setCsvError(nextError instanceof Error ? nextError.message : '导入失败。');
+                  } finally {
+                    setCsvImporting(false);
+                    event.currentTarget.value = '';
                   }
                 }}
-              >
-                <FileUp className="size-4" />
-                导入并生成账号
-              </Button>
+              />
+              <div className="flex flex-wrap items-center gap-3">
+                <Button disabled={csvImporting} onClick={() => csvInputRef.current?.click()}>
+                  {csvImporting ? <LoaderCircle className="size-4 animate-spin" /> : <FileUp className="size-4" />}
+                  {csvImporting ? '导入中...' : '选择 CSV 并导入'}
+                </Button>
+                {csvFileName ? (
+                  <p className="text-sm text-muted-foreground">
+                    最近导入：{csvFileName}{csvEncoding ? ` · ${formatCsvEncoding(csvEncoding)}` : ''}
+                  </p>
+                ) : null}
+              </div>
+              {showCsvProgress ? (
+                <div className="space-y-2 rounded-xl border border-border/70 bg-muted/30 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">导入中 ({csvProgressCurrent}/{csvProgressTotal})</p>
+                    <p className="text-xs text-muted-foreground">{csvProgressValue}%</p>
+                  </div>
+                  <Progress value={csvProgressValue} />
+                </div>
+              ) : null}
               {csvError ? <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{csvError}</p> : null}
               {csvResult.length ? <ResultTable users={csvResult} filename="imported_users.csv" /> : null}
             </CardContent>
@@ -801,29 +820,109 @@ function SortButton({
   );
 }
 
-function validateCsvContent(content: string) {
-  const lines = content
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+const CSV_IMPORT_EXAMPLE_ROWS: CsvImportEntry[] = [
+  { lineNumber: 1, name: '小奶龙', role: 'student', teacher_uid: 'T00001' },
+  { lineNumber: 2, name: '大奶龙', role: 'teacher', teacher_uid: '' },
+  { lineNumber: 3, name: '超级奶龙', role: 'admin', teacher_uid: '' }
+];
 
-  if (!lines.length) {
-    throw new Error('CSV 文件没有有效内容。');
+function CsvImportExampleDialog() {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button className="h-auto p-0 text-sm" variant="link">示例</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>CSV 示例</DialogTitle>
+          <DialogDescription>导入文件不包含表头。学生可填写管理老师 UID，教师和管理员最后一列留空即可。</DialogDescription>
+        </DialogHeader>
+        <Tabs defaultValue="source">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="source">源码</TabsTrigger>
+            <TabsTrigger value="table">表格</TabsTrigger>
+          </TabsList>
+          <TabsContent value="source" className="mt-4">
+            <pre className="overflow-x-auto rounded-xl border border-border/70 bg-muted/30 p-4 text-sm leading-6">{CSV_IMPORT_EXAMPLE_ROWS.map((row) => `${row.name},${row.role},${row.teacher_uid}`).join('\n')}</pre>
+          </TabsContent>
+          <TabsContent value="table" className="mt-4">
+            <div className="overflow-hidden rounded-xl border border-border/70">
+              <Table>
+                {/* <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead>姓名</TableHead>
+                    <TableHead>角色</TableHead>
+                    <TableHead>管理老师 UID</TableHead>
+                  </TableRow>
+                </TableHeader> */}
+                <TableBody>
+                  {CSV_IMPORT_EXAMPLE_ROWS.map((row) => (
+                    <TableRow key={row.lineNumber}>
+                      <TableCell>{row.name}</TableCell>
+                      <TableCell>{row.role}</TableCell>
+                      <TableCell>{row.teacher_uid || <span className="text-muted-foreground">留空</span>}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+async function importCsvEntries(
+  entries: CsvImportEntry[],
+  preview: CsvImportPreview,
+  fileName: string,
+  token: string,
+  signOut: () => void,
+  setCsvProgressCurrent: React.Dispatch<React.SetStateAction<number>>,
+  setCsvResult: React.Dispatch<React.SetStateAction<CreatedUser[]>>
+) {
+  const createdUsers: CreatedUser[] = [];
+
+  setCsvProgressCurrent(0);
+  setCsvResult([]);
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+
+    try {
+      const data = await apiRequest<{ user: CreatedUser }>(
+        '/admin/users',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            name: entry.name,
+            role: entry.role,
+            teacher_uid: entry.teacher_uid
+          })
+        },
+        token
+      );
+
+      createdUsers.push(data.user);
+      setCsvResult([...createdUsers]);
+      setCsvProgressCurrent(index + 1);
+    } catch (nextError) {
+      if (nextError instanceof ApiResponseError && nextError.status === 401) {
+        signOut();
+        throw nextError;
+      }
+
+      const message = nextError instanceof Error ? nextError.message : '导入失败。';
+      throw new Error(`文件 ${fileName} 第 ${entry.lineNumber} 行导入失败：${message}`);
+    }
   }
 
-  for (let index = 0; index < lines.length; index++) {
-    const parts = lines[index].split(',').map((part) => part.trim());
-    if (parts.length < 3) {
-      throw new Error(`第 ${index + 1} 行格式无效。`);
-    }
-    if (!parts[0]) {
-      throw new Error(`第 ${index + 1} 行姓名为空。`);
-    }
-    if (!['student', 'teacher', 'admin'].includes(parts[1])) {
-      throw new Error(`第 ${index + 1} 行角色无效。`);
-    }
-    if (parts[1] !== 'student' && parts[2] !== '') {
-      throw new Error(`第 ${index + 1} 行错误：非学生该列必须留空。`);
-    }
-  }
+  setCsvProgressCurrent(preview.totalCount);
+}
+
+function formatCsvEncoding(encoding: CsvImportPreview['encoding']) {
+  if (encoding === 'utf-16') return 'UTF-16';
+  if (encoding === 'gbk') return 'GBK';
+  return 'UTF-8';
 }
