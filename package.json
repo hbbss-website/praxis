@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "bun@1.3.10",
   "scripts": {
-    "dev": "bun build:frontend && concurrently -n \"API,WEB\" -c \"magenta,cyan\" \"bun --hot backend/src/server.ts\" \"bunx vite --host 0.0.0.0 --config frontend/vite.config.ts\"",
+    "dev": "concurrently -n \"API,WEB\" -c \"magenta,cyan\" \"bun --hot backend/src/server.ts\" \"bunx vite --host 0.0.0.0 --config frontend/vite.config.ts\"",
     "start": "bun build:frontend && bun backend/src/server.ts",
     "build:frontend": "bunx vite build --config frontend/vite.config.ts",
     "typecheck": "tsc --noEmit",
@@ -52,6 +52,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
     "tailwindcss": "^4.2.2",
+    "terser": "^5.46.1",
     "typescript": "^5.9.3",
     "vite": "^8.0.1"
   }

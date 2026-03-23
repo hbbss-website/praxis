@@ -3,7 +3,7 @@ node_modules/
 backend/uploads/
 backend/database.json
 
-frontend/js/
+frontend/dist/
 
 .DS_Store
 Thumbs.db
