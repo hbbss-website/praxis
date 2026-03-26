@@ -133,7 +133,7 @@ export function AdminUsersPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1.5">
                   <CardTitle>CSV 导入</CardTitle>
-                  <CardDescription>不包含表头，格式参见 <CsvImportExampleDialog />。支持 UTF-8、UTF-16 和 GBK 编码。</CardDescription>
+                  <CardDescription>不包含表头，格式参见<CsvImportExampleDialog />。支持 UTF-8、UTF-16 和 GBK 编码。</CardDescription>
                 </div>
                 <CsvImportExampleDialog />
               </div>
