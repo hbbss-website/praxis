@@ -1,13 +1,13 @@
-import { Elysia } from 'elysia';
+import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
+import { z } from 'zod';
 
 import database from '../database';
 import {
   apiError,
   createRecordBodySchema,
-  idParamSchema,
   isValidUploadPath,
   normalizeOptionalString,
-  normalizeRecordFilters,
   requireRole,
   updateRecordBodySchema,
   validateContent,
@@ -15,10 +15,15 @@ import {
   validateLocation,
   validatePracticeDate,
   validateTitle,
-  parseDuration
+  parseDuration,
+  validationHook
 } from '../http';
-import { authPlugin } from '../plugins/auth';
+import { authMiddleware, type AppBindings } from '../plugins/auth';
 import type { UpdateRecordInput } from '../models';
+
+const recordIdParamSchema = z.object({
+  id: z.string().regex(/^[1-9]\d*$/)
+});
 
 function buildRecordPayload(body: Record<string, unknown>) {
   const title = typeof body.title === 'string' ? body.title.trim() : '';
@@ -38,16 +43,28 @@ function buildRecordPayload(body: Record<string, unknown>) {
   };
 }
 
-export const studentRoutes = new Elysia({ prefix: '/student' })
-  .use(authPlugin)
-  .guard({
-    beforeHandle: ({ user, authError }) => requireRole(user, authError, ['student'])
+export const studentRoutes = new Hono<AppBindings>()
+  .use('/students/me/*', authMiddleware)
+  .use('/students/me/*', async (c, next) => {
+    const authFailure = requireRole(c, ['student']);
+
+    if (authFailure) {
+      return authFailure;
+    }
+
+    await next();
   })
-  .get('/records', ({ user }) => ({
-    records: database.getRecordsByStudent(user!.id),
-    statistics: database.getStudentStatistics(user!.id)
-  }))
-  .post('/records', ({ body, user }) => {
+  .get('/students/me/records', (c) => {
+    const user = c.get('user')!;
+
+    return c.json({
+      records: database.getRecordsByStudent(user.id),
+      statistics: database.getStudentStatistics(user.id)
+    });
+  })
+  .post('/students/me/records', zValidator('json', createRecordBodySchema, validationHook), (c) => {
+    const body = c.req.valid('json');
+    const user = c.get('user')!;
     const payload = buildRecordPayload(body as Record<string, unknown>);
     const titleError = validateTitle(payload.title);
     const contentError = validateContent(payload.content);
@@ -55,22 +72,22 @@ export const studentRoutes = new Elysia({ prefix: '/student' })
     const durationError = validateDuration(payload.duration ?? Number.NaN);
     const locationError = validateLocation(payload.location ?? null);
 
-    if (titleError) return apiError(400, titleError);
-    if (contentError) return apiError(400, contentError);
-    if (dateError) return apiError(400, dateError);
-    if (durationError) return apiError(400, durationError);
-    if (locationError) return apiError(400, locationError);
+    if (titleError) return apiError(c, 400, titleError);
+    if (contentError) return apiError(c, 400, contentError);
+    if (dateError) return apiError(c, 400, dateError);
+    if (durationError) return apiError(c, 400, durationError);
+    if (locationError) return apiError(c, 400, locationError);
 
     if (payload.imagePath && !isValidUploadPath(payload.imagePath)) {
-      return apiError(400, '图片路径无效。');
+      return apiError(c, 400, '图片路径无效。');
     }
 
-    if (database.countStudentRecordsToday(user!.id) >= database.MAX_DAILY_RECORDS) {
-      return apiError(429, `每天最多创建 ${database.MAX_DAILY_RECORDS} 条实践记录。`);
+    if (database.countStudentRecordsToday(user.id) >= database.MAX_DAILY_RECORDS) {
+      return apiError(c, 429, `每天最多创建 ${database.MAX_DAILY_RECORDS} 条实践记录。`);
     }
 
     const record = database.createRecord({
-      student_id: user!.id,
+      student_id: user.id,
       title: payload.title,
       content: payload.content,
       practice_date: payload.practiceDate,
@@ -79,62 +96,63 @@ export const studentRoutes = new Elysia({ prefix: '/student' })
       image_path: payload.imagePath ?? null
     });
 
-    return {
+    return c.json({
       message: '记录创建成功。',
       recordId: record.id
-    };
-  }, {
-    body: createRecordBodySchema
+    });
   })
-  .put('/records/:id', ({ params, body, user }) => {
-    const record = database.getRecordById(Number(params.id));
+  .put('/students/me/records/:id', zValidator('param', recordIdParamSchema, validationHook), zValidator('json', updateRecordBodySchema, validationHook), (c) => {
+    const id = Number(c.req.valid('param').id);
+    const body = c.req.valid('json');
+    const user = c.get('user')!;
+    const record = database.getRecordById(id);
 
-    if (!record || record.student_id !== user!.id) {
-      return apiError(404, '记录不存在。');
+    if (!record || record.student_id !== user.id) {
+      return apiError(c, 404, '记录不存在。');
     }
 
     if (record.status !== 'pending' && record.status !== 'rejected') {
-      return apiError(403, '只能修改待审核或已驳回的记录。');
+      return apiError(c, 403, '只能修改待审核或已驳回的记录。');
     }
 
     const payload = buildRecordPayload(body as Record<string, unknown>);
     const updates: UpdateRecordInput = {
-      updated_by_uid: user!.uid
+      updated_by_uid: user.uid
     };
 
     if (body.title !== undefined) {
       const error = validateTitle(payload.title);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       updates.title = payload.title;
     }
 
     if (body.content !== undefined) {
       const error = validateContent(payload.content);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       updates.content = payload.content;
     }
 
     if (body.practice_date !== undefined) {
       const error = validatePracticeDate(payload.practiceDate);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       updates.practice_date = payload.practiceDate;
     }
 
     if (body.location !== undefined) {
       const error = validateLocation(payload.location ?? null);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       updates.location = payload.location ?? null;
     }
 
     if (body.duration !== undefined) {
       const error = validateDuration(payload.duration ?? Number.NaN);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       updates.duration = payload.duration!;
     }
 
     if (body.image_path !== undefined) {
       if (payload.imagePath && !isValidUploadPath(payload.imagePath)) {
-        return apiError(400, '图片路径无效。');
+        return apiError(c, 400, '图片路径无效。');
       }
 
       updates.image_path = payload.imagePath ?? null;
@@ -146,32 +164,34 @@ export const studentRoutes = new Elysia({ prefix: '/student' })
     }
 
     database.updateRecord(record.id, updates);
-    return { message: '记录更新成功。' };
-  }, {
-    body: updateRecordBodySchema,
-    params: idParamSchema
+    return c.json({ message: '记录更新成功。' });
   })
-  .delete('/records/:id', ({ params, user }) => {
-    const record = database.getRecordById(Number(params.id));
+  .delete('/students/me/records/:id', zValidator('param', recordIdParamSchema, validationHook), (c) => {
+    const id = Number(c.req.valid('param').id);
+    const user = c.get('user')!;
+    const record = database.getRecordById(id);
 
-    if (!record || record.student_id !== user!.id) {
-      return apiError(404, '记录不存在。');
+    if (!record || record.student_id !== user.id) {
+      return apiError(c, 404, '记录不存在。');
     }
 
     if (record.status !== 'pending') {
-      return apiError(403, '只能删除待审核的记录。');
+      return apiError(c, 403, '只能删除待审核的记录。');
     }
 
     database.deleteRecord(record.id);
-    return { message: '记录删除成功。' };
-  }, {
-    params: idParamSchema
+    return c.json({ message: '记录删除成功。' });
   })
-  .get('/notifications', ({ user }) => ({
-    notifications: database.getNotificationsByStudent(user!.id),
-    unreadCount: database.getUnreadNotificationCount(user!.id)
-  }))
-  .post('/notifications/read', ({ user }) => {
-    database.markNotificationsAsRead(user!.id);
-    return { message: '通知已标记为已读。' };
+  .get('/students/me/notifications', (c) => {
+    const user = c.get('user')!;
+
+    return c.json({
+      notifications: database.getNotificationsByStudent(user.id),
+      unreadCount: database.getUnreadNotificationCount(user.id)
+    });
+  })
+  .post('/students/me/notifications/read-status', (c) => {
+    const user = c.get('user')!;
+    database.markNotificationsAsRead(user.id);
+    return c.json({ message: '通知已标记为已读。' });
   });

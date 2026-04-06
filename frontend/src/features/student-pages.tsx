@@ -511,7 +511,10 @@ export function AccountCard({
   const [submitting, setSubmitting] = useState('');
 
   return (
-    <StudentPageFrame title="账号设置" description="当前登录信息存储在会话中，关闭浏览器标签页后需要重新登录。">
+    <StudentPageFrame
+      title="账号设置"
+      description="当前登录信息存储在会话中，关闭浏览器标签页后需要重新登录。"
+    >
       <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
         <Card>
           <CardHeader>
@@ -611,7 +614,9 @@ export function AccountCard({
                 <Field label="确认密码">
                   <Input type="password" value={passwordForm.confirm_password} onChange={(event) => setPasswordForm((current) => ({ ...current, confirm_password: event.target.value }))} required />
                 </Field>
-                <Button disabled={submitting === 'password'} type="submit">{submitting === 'password' ? '提交中...' : '修改密码'}</Button>
+                <Button disabled={submitting === 'password'} type="submit">
+                  {submitting === 'password' ? '提交中...' : '修改密码'}
+                </Button>
               </form>
             </CardContent>
           </Card>

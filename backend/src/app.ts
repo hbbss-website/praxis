@@ -1,55 +1,47 @@
-import { cors } from '@elysiajs/cors';
-import staticPlugin from '@elysiajs/static';
-import { Elysia } from 'elysia';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { apiError } from './http';
-import { authPlugin } from './plugins/auth';
+import type { AppBindings } from './plugins/auth';
 import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { studentRoutes } from './routes/students';
 import { teacherRoutes } from './routes/teachers';
 import { uploadRoutes } from './routes/upload';
 
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const frontendDir = path.join(currentDir, '..', '..', 'frontend', 'dist');
+const frontendDir = path.resolve(process.cwd(), 'frontend/dist');
 const frontendIndexPath = path.join(frontendDir, 'index.html');
-const uploadDir = path.join(currentDir, '..', 'uploads');
+const uploadDir = path.resolve(process.cwd(), 'backend/uploads');
 
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+fs.mkdirSync(uploadDir, { recursive: true });
 
 const allowedOrigins = (process.env.CORS_ORIGINS ?? '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const uploadsPlugin = await staticPlugin({
-  assets: uploadDir,
-  prefix: '/uploads',
-  etag: false,
-  maxAge: 0,
-  indexHTML: false,
-  alwaysStatic: false,
-  silent: true
-});
+const mimeByExtension: Record<string, string> = {
+  '.css': 'text/css; charset=utf-8',
+  '.gif': 'image/gif',
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2'
+};
 
-function resolveFrontendIndex() {
-  if (!fs.existsSync(frontendIndexPath)) {
-    return null;
-  }
-
-  return Bun.file(frontendIndexPath);
-}
-
-function resolveFrontendAsset(requestPath: string) {
+function resolveSafeFile(baseDir: string, requestPath: string) {
   const safePath = path.normalize(requestPath).replace(/^[/\\]+/, '').replace(/^(\.\.(\/|\\|$))+/, '');
-  const filePath = path.join(frontendDir, safePath);
+  const filePath = path.join(baseDir, safePath);
 
-  if (!filePath.startsWith(frontendDir)) {
+  if (!filePath.startsWith(baseDir)) {
     return null;
   }
 
@@ -57,76 +49,88 @@ function resolveFrontendAsset(requestPath: string) {
     return null;
   }
 
-  return Bun.file(filePath);
+  return filePath;
 }
 
-export const api = new Elysia({ prefix: '/api' })
-  .use(
-    cors({
-      origin: (request) => {
-        const origin = request.headers.get('origin');
-
-        if (!origin || origin === 'null' || allowedOrigins.length === 0) {
-          return true;
-        }
-
-        return allowedOrigins.includes(origin);
-      },
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
-    })
-  )
-  .use(authPlugin)
-  .use(authRoutes)
-  .use(studentRoutes)
-  .use(teacherRoutes)
-  .use(adminRoutes)
-  .use(uploadRoutes)
-  .all('*', () => apiError(404, '资源不存在。'))
-  .onError(({ code, error }) => {
-    if (code === 'VALIDATION' || code === 'PARSE') {
-      return apiError(400, error instanceof Error && error.message ? error.message : '请求参数无效。');
+function fileResponse(filePath: string) {
+  return new Response(fs.readFileSync(filePath), {
+    headers: {
+      'content-type': mimeByExtension[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream'
     }
+  });
+}
 
+function resolveFrontendIndex() {
+  return fs.existsSync(frontendIndexPath) ? frontendIndexPath : null;
+}
+
+export const api = new Hono<AppBindings>()
+  .use('*', cors({
+    origin: (origin) => {
+      if (!origin || origin === 'null' || allowedOrigins.length === 0) {
+        return origin ?? '*';
+      }
+
+      return allowedOrigins.includes(origin) ? origin : null;
+    },
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+  }))
+  .route('/auth', authRoutes)
+  .route('/admin', adminRoutes)
+  .route('/', studentRoutes)
+  .route('/', teacherRoutes)
+  .route('/', uploadRoutes)
+  .notFound((c) => apiError(c, 404, '资源不存在。'))
+  .onError((error, c) => {
     console.error(error);
-    return apiError(500, error instanceof Error && error.message ? error.message : '服务器内部错误。');
+    return apiError(c, 500, error instanceof Error && error.message ? error.message : '服务器内部错误。');
   });
 
 export type Api = typeof api;
 
-export const app = new Elysia()
-  .use(uploadsPlugin)
-  .use(api)
-  .get('/assets/*', ({ path: requestPath, set }) => {
-    const asset = resolveFrontendAsset(requestPath);
+export const app = new Hono<AppBindings>()
+  .route('/api', api)
+  .get('/health', (c) => c.json({ ok: true }))
+  .get('/uploads/*', (c) => {
+    const filePath = resolveSafeFile(uploadDir, c.req.path.replace(/^\/uploads\//, ''));
 
-    if (!asset) {
-      set.status = 404;
-      return '资源不存在。';
+    if (!filePath) {
+      return apiError(c, 404, '资源不存在。');
     }
 
-    return asset;
+    return fileResponse(filePath);
   })
-  .get('/', () => resolveFrontendIndex() ?? '前端尚未构建，请先运行 bun build:frontend。')
-  .get('/health', () => ({ ok: true }))
-  .all('*', ({ path: requestPath, set }) => {
-    if (requestPath.startsWith('/api') || requestPath.startsWith('/uploads')) {
-      return apiError(404, '资源不存在。');
+  .get('/assets/*', (c) => {
+    const filePath = resolveSafeFile(frontendDir, c.req.path.replace(/^\//, ''));
+
+    if (!filePath) {
+      return new Response('资源不存在。', { status: 404 });
     }
 
-    const asset = resolveFrontendAsset(requestPath.slice(1));
-
-    if (asset) {
-      return asset;
+    return fileResponse(filePath);
+  })
+  .get('/', () => {
+    const filePath = resolveFrontendIndex();
+    return filePath ? fileResponse(filePath) : new Response('前端尚未构建，请先运行 pnpm build:frontend。');
+  })
+  .all('*', (c) => {
+    if (c.req.path.startsWith('/api') || c.req.path.startsWith('/uploads')) {
+      return apiError(c, 404, '资源不存在。');
     }
 
-    const file = resolveFrontendIndex();
+    const assetPath = resolveSafeFile(frontendDir, c.req.path.slice(1));
 
-    if (!file) {
-      set.status = 404;
-      return '前端尚未构建，请先运行 bun build:frontend。';
+    if (assetPath) {
+      return fileResponse(assetPath);
     }
 
-    return file;
+    const indexPath = resolveFrontendIndex();
+
+    if (!indexPath) {
+      return new Response('前端尚未构建，请先运行 pnpm build:frontend。', { status: 404 });
+    }
+
+    return fileResponse(indexPath);
   });
 
 export type App = typeof app;

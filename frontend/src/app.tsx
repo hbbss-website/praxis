@@ -5,7 +5,7 @@ import { AppShell } from '@/layout/app-shell';
 import { Spinner } from '@/components/ui/spinner';
 import { ApiResponseError, createApiClient, unwrapResponse } from '@/lib/api';
 import { SessionProvider, useSession } from '@/lib/auth';
-import { getDefaultPathByRole } from '@/lib/session';
+import { getDefaultPathByRole, getPasswordSetupPath } from '@/lib/session';
 import type { AppNotification, StoredUser, UserRole } from '@/lib/types';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -22,6 +22,7 @@ function lazyPage<TModule extends Record<string, unknown>>(
 }
 
 const LoginPage = lazyPage(() => import('@/features/auth-page'), 'LoginPage');
+const SetupPasswordPage = lazyPage(() => import('@/features/setup-password-page'), 'SetupPasswordPage');
 const StudentDashboardPage = lazyPage(() => import('@/features/student-pages'), 'StudentDashboardPage');
 const StudentUploadPage = lazyPage(() => import('@/features/student-pages'), 'StudentUploadPage');
 const StudentNotificationsPage = lazyPage(() => import('@/features/student-pages'), 'StudentNotificationsPage');
@@ -48,7 +49,7 @@ function DeferredRoute({ children }: { children: ReactNode }) {
 
 function RootRedirect() {
   const { user } = useSession();
-  return <Navigate to={user ? getDefaultPathByRole(user.role) : '/login'} replace />;
+  return <Navigate to={user ? getDefaultPathByRole(user.role, user.password_setup_required) : '/login'} replace />;
 }
 
 function RoleLayout({ role }: { role: UserRole }) {
@@ -58,6 +59,7 @@ function RoleLayout({ role }: { role: UserRole }) {
   useEffect(() => {
     if (!token || !user) return;
     if (user.role !== 'student') return;
+    if (user.password_setup_required) return;
 
     unwrapResponse<{ unreadCount: number; notifications: AppNotification[] }>(createApiClient(token).student.notifications.get())
       .then((data) => setNotificationCount(data.unreadCount))
@@ -69,14 +71,18 @@ function RoleLayout({ role }: { role: UserRole }) {
   if (!token || !user) return <Navigate to="/login" replace />;
 
   const allowed = user.role === role || (role === 'teacher' && user.role === 'admin');
-  if (!allowed) return <Navigate to={getDefaultPathByRole(user.role)} replace />;
+  if (!allowed) return <Navigate to={getDefaultPathByRole(user.role, user.password_setup_required)} replace />;
+
+  if (user.password_setup_required) {
+    return <Navigate to={getPasswordSetupPath()} replace />;
+  }
 
   return <AppShell user={user} notificationCount={notificationCount} />;
 }
 
 function LoginGuard() {
   const { user } = useSession();
-  return user ? <Navigate to={getDefaultPathByRole(user.role)} replace /> : <DeferredRoute><LoginPage /></DeferredRoute>;
+  return user ? <Navigate to={getDefaultPathByRole(user.role, user.password_setup_required)} replace /> : <DeferredRoute><LoginPage /></DeferredRoute>;
 }
 
 function AdminRecordsRoute() {
@@ -91,6 +97,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<LoginGuard />} />
+          <Route path="/setup-password" element={<DeferredRoute><SetupPasswordPage /></DeferredRoute>} />
 
           <Route path="/student" element={<RoleLayout role="student" />}>
             <Route path="dashboard" element={<DeferredRoute><StudentDashboardPage /></DeferredRoute>} />

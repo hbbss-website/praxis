@@ -1,12 +1,12 @@
 # 默认提示词
 
-本项目采用 bun 开发，各种操作的命令参见 package.json。如果你修改了后端，请跑一遍 `test:all`；如果需要，请修改 package.json 和 README.md。
+本项目采用 `Node.js + pnpm` 开发，各种操作的命令参见 `package.json`。如果你修改了后端或数据库结构，请跑一遍 `test:all`；如果需要，请同步修改 `package.json`、`README.md`、`drizzle.config.ts` 和相关脚本。
 
 ## 前端
 
 **不要画蛇添足地添加任何不必要的元素或文本，包括不必要的解释、说明和英文翻译等。**
 
-请你通过 shadcn/ui 安装全部 ui 组件，并采用简洁紧凑的 ui 风格，页面以白色为主色调，不需要主题色，字体采用 `@ibm/plex-sans-sc`。
+请你通过 shadcn/ui 安装全部 ui 组件，并采用简洁紧凑的 ui 风格。
 
 不要相信用户传入的内容，一定记得进行合法性判断。
 
@@ -14,13 +14,15 @@
 
 ## 后端
 
-后端采用 ElysiaJS 编写，请参考 <https://elysiajs.com/llms.txt> 以获得最佳实践。
-
-使用 Eden 实现和前端的类型互通。
+后端采用 `Hono` 编写，数据库采用 `SQLite + Drizzle ORM`，运行时使用 `better-sqlite3`。
 
 请遵循 RESTful API 规范。
 
 不要相信前端传回的内容，一定记得进行合法性判断。
+
+如果你修改了 `schema`、迁移脚本或数据库文件位置，请同步完成必要的修改。
+
+前后端类型共享优先复用现有 TypeScript 类型；前端接口调用优先使用 Hono RPC，不要重复手写 REST 路径与请求类型，只在必要时补充少量适配层。
 
 ## 代码风格
 

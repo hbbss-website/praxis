@@ -1,12 +1,33 @@
-import { jwt } from '@elysiajs/jwt';
-import { Elysia } from 'elysia';
+import { createMiddleware } from 'hono/factory';
+import { SignJWT, jwtVerify } from 'jose';
 
-import { jwtAudience, jwtIssuer, jwtSecret, tokenLifetime } from '../auth/config';
+import { jwtAudience, jwtIssuer, jwtSecret, tokenLifetimeSeconds } from '../auth/config';
+import { isLowCostPasswordHash } from '../auth/password';
 import database from '../database';
-import { authUserSchema, toPublicUser } from '../http';
 import type { AuthTokenPayload, PublicUser } from '../models';
 
-function readBearerToken(authorization: string | undefined) {
+export interface AppBindings {
+  Variables: {
+    authError: string | null;
+    user: PublicUser | null;
+  };
+}
+
+const jwtKey = new TextEncoder().encode(jwtSecret);
+
+function isPasswordSetupAllowedRequest(path: string, method: string) {
+  if (method === 'OPTIONS') {
+    return true;
+  }
+
+  if (path === '/api/auth/me') {
+    return true;
+  }
+
+  return path === '/api/auth/password' && method === 'PUT';
+}
+
+function readBearerToken(authorization?: string | null) {
   if (!authorization) {
     return {
       token: null,
@@ -27,47 +48,58 @@ function readBearerToken(authorization: string | undefined) {
   } as const;
 }
 
-export const authPlugin = new Elysia({ name: 'auth-plugin' })
-  .use(
-    jwt({
-      name: 'accessJwt',
-      secret: jwtSecret,
-      schema: authUserSchema,
-      aud: jwtAudience,
-      iss: jwtIssuer,
-      exp: tokenLifetime
-    })
-  )
-  .derive({ as: 'global' }, async ({ headers, accessJwt }) => {
-    const { token, error } = readBearerToken(headers.authorization);
+export async function signAccessToken(user: PublicUser) {
+  return await new SignJWT({ ...user })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setIssuer(jwtIssuer)
+    .setAudience(jwtAudience)
+    .setExpirationTime(`${tokenLifetimeSeconds}s`)
+    .sign(jwtKey);
+}
 
-    if (!token) {
-      return {
-        authError: error,
-        user: null as PublicUser | null
-      };
+export const authMiddleware = createMiddleware<AppBindings>(async (c, next) => {
+  const { token, error } = readBearerToken(c.req.header('authorization'));
+
+  if (!token) {
+    c.set('authError', error);
+    c.set('user', null);
+    await next();
+    return;
+  }
+
+  try {
+    const verified = await jwtVerify<AuthTokenPayload>(token, jwtKey, {
+      issuer: jwtIssuer,
+      audience: jwtAudience
+    });
+    const currentUser = database.findUserById(verified.payload.id);
+
+    if (!currentUser || currentUser.uid !== verified.payload.uid || currentUser.role !== verified.payload.role) {
+      c.set('authError', '认证用户不存在或已失效。');
+      c.set('user', null);
+      await next();
+      return;
     }
 
-    const payload = await accessJwt.verify(token);
+    const passwordSetupRequired = isLowCostPasswordHash(currentUser.password);
 
-    if (!payload) {
-      return {
-        authError: '认证令牌无效或已过期。',
-        user: null as PublicUser | null
-      };
+    c.set('authError', null);
+    c.set('user', {
+      id: currentUser.id,
+      uid: currentUser.uid,
+      role: currentUser.role,
+      name: currentUser.name,
+      password_setup_required: passwordSetupRequired
+    });
+
+    if (passwordSetupRequired && !isPasswordSetupAllowedRequest(c.req.path, c.req.method)) {
+      return c.json({ error: '请设置密码。' }, 403);
     }
+  } catch {
+    c.set('authError', '认证令牌无效或已过期。');
+    c.set('user', null);
+  }
 
-    const currentUser = database.findUserById((payload as AuthTokenPayload).id);
-
-    if (!currentUser || currentUser.uid !== (payload as AuthTokenPayload).uid || currentUser.role !== (payload as AuthTokenPayload).role) {
-      return {
-        authError: '认证用户不存在或已失效。',
-        user: null as PublicUser | null
-      };
-    }
-
-    return {
-      authError: null,
-      user: toPublicUser(currentUser)
-    };
-  });
+  await next();
+});

@@ -106,8 +106,8 @@ export function AppShell({
           </Card>
         </div>
 
-        <Card className="hidden h-fit border-border/70 bg-card/95 py-0 shadow-sm lg:block">
-          <aside className="flex h-full flex-col gap-5 p-4">
+        <Card className="hidden h-fit self-start border-border/70 bg-card/95 py-0 shadow-sm lg:sticky lg:top-5 lg:block lg:max-h-[calc(100vh-2.5rem)]">
+          <aside className="flex h-full flex-col gap-5 overflow-y-auto p-4">
             <Link to="/" className="flex items-center gap-3">
               <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <ClipboardList className="size-5" />

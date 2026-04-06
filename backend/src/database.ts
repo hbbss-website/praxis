@@ -1,709 +1,719 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-import { hashPassword, hashPasswordSync } from './auth/password';
+import { and, desc, eq, getTableColumns, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
+
+import { hashPassword, hashPasswordSync, hashPasswords } from './auth/password';
+import { db } from './db/client';
+import { ensureDatabaseSchema } from './db/setup';
+import { notifications, practiceRecords, teacherStudents, users } from './db/schema';
 import type {
   AppNotification,
   CreateRecordInput,
   CreateUserResult,
-  DatabaseState,
   NotificationType,
   PracticeRecord,
   RecordFilters,
   RecordStatistics,
-  RecordStatus,
   StudentRecord,
+  StudentSummary,
   TeacherRecord,
   TeacherRecordSummary,
   TeacherStatistics,
   TeacherStudentAssignment,
   UpdateRecordInput,
   User,
-  UserRole
+  UserRole,
+  UserSummary
 } from './models';
+import { userRoles } from './models';
 
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env.DATABASE_FILE
-  ? path.resolve(process.env.DATABASE_FILE)
-  : path.join(currentDir, '..', 'database.json');
-const uploadDir = path.join(currentDir, '..', 'uploads');
-
-const validRoles: UserRole[] = ['admin', 'teacher', 'student'];
-const validRecordStatuses: RecordStatus[] = ['approved', 'pending', 'rejected'];
+const uploadDir = path.resolve(process.cwd(), 'backend/uploads');
+const uploadPathPattern = /^\/uploads\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const deletedUserName = '已删除用户';
+const generatedPasswordLength = 8;
 const rolePrefixes: Record<UserRole, string> = {
   admin: 'A',
   teacher: 'T',
   student: 'S'
 };
-const uploadPathPattern = /^\/uploads\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const deletedUserName = '已删除用户';
+
+type UserRow = typeof users.$inferSelect;
+type PracticeRecordRow = typeof practiceRecords.$inferSelect;
+const practiceRecordColumns = getTableColumns(practiceRecords);
 
 function nowIso() {
   return new Date().toISOString();
 }
 
-function toFiniteNumber(value: unknown, fallback: number) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
-
-function nextNumericId(items: Array<{ id: number }>) {
-  return items.reduce((maxId, item) => Math.max(maxId, item.id), 0) + 1;
-}
-
 function generatePlainPassword() {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  const bytes = crypto.randomBytes(8);
+  const bytes = crypto.randomBytes(generatedPasswordLength);
   return Array.from(bytes, (byte) => chars[byte % chars.length]).join('');
 }
 
-function isUserRole(value: unknown): value is UserRole {
-  return validRoles.includes(value as UserRole);
-}
-
-function isRecordStatus(value: unknown): value is RecordStatus {
-  return validRecordStatuses.includes(value as RecordStatus);
-}
-
-function createEmptyState(): DatabaseState {
+function toUser(row: UserRow): User {
   return {
-    users: [],
-    practice_records: [],
-    notifications: [],
-    teacher_students: [],
-    nextId: {
-      users: 1,
-      practice_records: 1,
-      notifications: 1
-    },
-    nextUidNumber: {
-      admin: 1,
-      teacher: 1,
-      student: 1
+    id: row.id,
+    uid: row.uid,
+    password: row.password,
+    role: row.role as UserRole,
+    name: row.name,
+    created_at: row.createdAt
+  };
+}
+
+function toPracticeRecord(row: PracticeRecordRow): PracticeRecord {
+  return {
+    id: row.id,
+    student_id: row.studentId,
+    student_uid_snapshot: row.studentUidSnapshot,
+    title: row.title,
+    content: row.content,
+    practice_date: row.practiceDate,
+    location: row.location,
+    duration: row.duration,
+    image_path: row.imagePath,
+    status: row.status as PracticeRecord['status'],
+    teacher_comment: row.teacherComment,
+    created_at: row.createdAt,
+    updated_at: row.updatedAt,
+    updated_by_uid: row.updatedByUid
+  };
+}
+
+function toStudentSummary(row: Pick<UserRow, 'id' | 'uid' | 'name' | 'createdAt'>): StudentSummary {
+  return {
+    id: row.id,
+    uid: row.uid,
+    name: row.name,
+    created_at: row.createdAt
+  };
+}
+
+function toUserSummary(row: Pick<UserRow, 'id' | 'uid' | 'role' | 'name' | 'createdAt'>): UserSummary {
+  return {
+    id: row.id,
+    uid: row.uid,
+    role: row.role as UserRole,
+    name: row.name,
+    created_at: row.createdAt
+  };
+}
+
+function toNotification(row: typeof notifications.$inferSelect): AppNotification {
+  return {
+    id: row.id,
+    student_id: row.studentId,
+    type: row.type as NotificationType,
+    message: row.message,
+    is_read: row.isRead,
+    created_at: row.createdAt
+  };
+}
+
+function toFiniteNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : Number(value ?? 0) || 0;
+}
+
+function activeUserById(id: number) {
+  return and(eq(users.id, id), isNull(users.deletedAt));
+}
+
+function activeUserByUid(uid: string) {
+  return and(eq(users.uid, uid), isNull(users.deletedAt));
+}
+
+function buildRecordWhere(filters: RecordFilters = {}, visibleStudentIds?: Set<number>) {
+  const conditions = [];
+
+  if (visibleStudentIds) {
+    const ids = [...visibleStudentIds];
+
+    if (ids.length === 0) {
+      conditions.push(sql`1 = 0`);
+    } else {
+      conditions.push(inArray(practiceRecords.studentId, ids));
     }
-  };
+  }
+
+  if (filters.student_id) {
+    conditions.push(eq(practiceRecords.studentId, filters.student_id));
+  }
+
+  if (filters.teacher_id) {
+    conditions.push(sql`${practiceRecords.studentId} in (select ${teacherStudents.studentId} from ${teacherStudents} where ${teacherStudents.teacherId} = ${filters.teacher_id})`);
+  }
+
+  if (filters.status) {
+    conditions.push(eq(practiceRecords.status, filters.status));
+  }
+
+  if (filters.practice_after) {
+    conditions.push(gte(practiceRecords.practiceDate, filters.practice_after));
+  }
+
+  if (filters.practice_before) {
+    conditions.push(lte(practiceRecords.practiceDate, filters.practice_before));
+  }
+
+  if (filters.created_after) {
+    conditions.push(gte(practiceRecords.createdAt, filters.created_after));
+  }
+
+  if (filters.created_before) {
+    conditions.push(lte(practiceRecords.createdAt, filters.created_before));
+  }
+
+  if (filters.updated_after) {
+    conditions.push(gte(practiceRecords.updatedAt, filters.updated_after));
+  }
+
+  if (filters.updated_before) {
+    conditions.push(lte(practiceRecords.updatedAt, filters.updated_before));
+  }
+
+  return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
-function sanitizeUser(value: unknown): User | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const candidate = value as Partial<User>;
-
-  if (
-    typeof candidate.id !== 'number' ||
-    typeof candidate.uid !== 'string' ||
-    typeof candidate.password !== 'string' ||
-    !isUserRole(candidate.role) ||
-    typeof candidate.name !== 'string' ||
-    typeof candidate.created_at !== 'string'
-  ) {
-    return null;
-  }
-
+function recordIdentitySelect() {
   return {
-    id: candidate.id,
-    uid: candidate.uid,
-    password: candidate.password,
-    role: candidate.role,
-    name: candidate.name,
-    created_at: candidate.created_at
+    student_name: sql<string>`case when ${users.id} is null or ${users.deletedAt} is not null then ${deletedUserName} else ${users.name} end`,
+    student_uid: sql<string>`case when ${users.id} is null then coalesce(${practiceRecords.studentUidSnapshot}, '') else ${users.uid} end`
   };
 }
 
-function sanitizeRecord(value: unknown): PracticeRecord | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const candidate = value as Partial<PracticeRecord>;
-
-  if (
-    typeof candidate.id !== 'number' ||
-    typeof candidate.student_id !== 'number' ||
-    typeof candidate.title !== 'string' ||
-    typeof candidate.content !== 'string' ||
-    typeof candidate.practice_date !== 'string' ||
-    typeof candidate.duration !== 'number' ||
-    !isRecordStatus(candidate.status) ||
-    typeof candidate.created_at !== 'string' ||
-    typeof candidate.updated_at !== 'string'
-  ) {
-    return null;
-  }
-
-  if (candidate.location !== undefined && candidate.location !== null && typeof candidate.location !== 'string') {
-    return null;
-  }
-
-  if (candidate.image_path !== undefined && candidate.image_path !== null && typeof candidate.image_path !== 'string') {
-    return null;
-  }
-
-  if (candidate.teacher_comment !== undefined && candidate.teacher_comment !== null && typeof candidate.teacher_comment !== 'string') {
-    return null;
-  }
-
-  if (candidate.student_uid_snapshot !== undefined && candidate.student_uid_snapshot !== null && typeof candidate.student_uid_snapshot !== 'string') {
-    return null;
-  }
-
-  if (candidate.updated_by_uid !== undefined && candidate.updated_by_uid !== null && typeof candidate.updated_by_uid !== 'string') {
-    return null;
-  }
-
-  return {
-    id: candidate.id,
-    student_id: candidate.student_id,
-    student_uid_snapshot: candidate.student_uid_snapshot ?? null,
-    title: candidate.title,
-    content: candidate.content,
-    practice_date: candidate.practice_date,
-    location: candidate.location ?? null,
-    duration: candidate.duration,
-    image_path: candidate.image_path ?? null,
-    status: candidate.status,
-    teacher_comment: candidate.teacher_comment ?? null,
-    created_at: candidate.created_at,
-    updated_at: candidate.updated_at,
-    updated_by_uid: candidate.updated_by_uid ?? null
-  };
-}
-
-function sanitizeNotification(value: unknown): AppNotification | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const candidate = value as Partial<AppNotification>;
-
-  if (
-    typeof candidate.id !== 'number' ||
-    typeof candidate.student_id !== 'number' ||
-    typeof candidate.type !== 'string' ||
-    typeof candidate.message !== 'string' ||
-    typeof candidate.is_read !== 'boolean' ||
-    typeof candidate.created_at !== 'string'
-  ) {
-    return null;
-  }
-
-  return {
-    id: candidate.id,
-    student_id: candidate.student_id,
-    type: candidate.type as NotificationType,
-    message: candidate.message,
-    is_read: candidate.is_read,
-    created_at: candidate.created_at
-  };
-}
-
-function sanitizeAssignment(value: unknown): TeacherStudentAssignment | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const candidate = value as Partial<TeacherStudentAssignment>;
-
-  if (typeof candidate.teacher_id !== 'number' || typeof candidate.student_id !== 'number') {
-    return null;
-  }
-
-  return {
-    teacher_id: candidate.teacher_id,
-    student_id: candidate.student_id
-  };
-}
-
-function sanitizeState(raw: unknown): DatabaseState {
-  if (!raw || typeof raw !== 'object') {
-    return createEmptyState();
-  }
-
-  const source = raw as Partial<DatabaseState>;
-  const users = Array.isArray(source.users) ? source.users.map(sanitizeUser).filter(Boolean) as User[] : [];
-  const records = Array.isArray(source.practice_records)
-    ? source.practice_records.map(sanitizeRecord).filter(Boolean) as PracticeRecord[]
-    : [];
-  const notifications = Array.isArray(source.notifications)
-    ? source.notifications.map(sanitizeNotification).filter(Boolean) as AppNotification[]
-    : [];
-  const assignments = Array.isArray(source.teacher_students)
-    ? source.teacher_students.map(sanitizeAssignment).filter(Boolean) as TeacherStudentAssignment[]
-    : [];
-  const nextUid = source.nextUidNumber && typeof source.nextUidNumber === 'object'
-    ? source.nextUidNumber as Partial<DatabaseState['nextUidNumber']>
-    : {};
-
-  return {
-    users,
-    practice_records: records,
-    notifications,
-    teacher_students: assignments,
-    nextId: {
-      users: Math.max(toFiniteNumber(source.nextId?.users, 0), nextNumericId(users)),
-      practice_records: Math.max(toFiniteNumber(source.nextId?.practice_records, 0), nextNumericId(records)),
-      notifications: Math.max(toFiniteNumber(source.nextId?.notifications, 0), nextNumericId(notifications))
-    },
-    nextUidNumber: {
-      admin: toFiniteNumber(nextUid.admin, 1),
-      teacher: toFiniteNumber(nextUid.teacher, 1),
-      student: toFiniteNumber(nextUid.student, 1)
-    }
-  };
-}
-
-class JsonDatabase {
+class SQLiteDatabase {
   readonly MAX_DAILY_RECORDS = 50;
-  #state: DatabaseState = createEmptyState();
 
   constructor() {
-    this.load();
+    ensureDatabaseSchema();
     this.seedDefaults();
   }
 
   isValidRole(role: unknown): role is UserRole {
-    return isUserRole(role);
+    return userRoles.includes(role as UserRole);
   }
 
   findUserById(id: number) {
-    return this.#state.users.find((user) => user.id === id);
+    const row = db.select().from(users).where(activeUserById(id)).get();
+    return row ? toUser(row) : undefined;
   }
 
   findUserByUid(uid: string) {
-    return this.#state.users.find((user) => user.uid === uid);
+    const row = db.select().from(users).where(activeUserByUid(uid)).get();
+    return row ? toUser(row) : undefined;
+  }
+
+  findTeachersByUids(uids: string[]) {
+    if (uids.length === 0) {
+      return [];
+    }
+
+    return db
+      .select({
+        id: users.id,
+        uid: users.uid
+      })
+      .from(users)
+      .where(and(inArray(users.uid, uids), eq(users.role, 'teacher'), isNull(users.deletedAt)))
+      .all();
   }
 
   getUsersByRole(role?: UserRole) {
-    const users = role
-      ? this.#state.users.filter((user) => user.role === role)
-      : this.#state.users;
+    const where = role
+      ? and(eq(users.role, role), isNull(users.deletedAt))
+      : isNull(users.deletedAt);
 
-    return users
-      .map(({ id, uid, role: userRole, name, created_at }) => ({
-        id,
-        uid,
-        role: userRole,
-        name,
-        created_at
-      }))
-      .sort((left, right) => right.id - left.id);
+    return db
+      .select({
+        id: users.id,
+        uid: users.uid,
+        role: users.role,
+        name: users.name,
+        createdAt: users.createdAt
+      })
+      .from(users)
+      .where(where)
+      .orderBy(desc(users.id))
+      .all()
+      .map(toUserSummary);
   }
 
   getAllStudents() {
-    return this.#state.users
-      .filter((user) => user.role === 'student')
-      .map(({ id, uid, name, created_at }) => ({ id, uid, name, created_at }))
-      .sort((left, right) => right.id - left.id);
+    return db
+      .select({
+        id: users.id,
+        uid: users.uid,
+        name: users.name,
+        createdAt: users.createdAt
+      })
+      .from(users)
+      .where(and(eq(users.role, 'student'), isNull(users.deletedAt)))
+      .orderBy(desc(users.id))
+      .all()
+      .map(toStudentSummary);
   }
 
   async createUser(name: string, role: UserRole): Promise<CreateUserResult> {
     const password = generatePlainPassword();
-    const user: User = {
-      id: this.#state.nextId.users++,
-      uid: this.generateUid(role),
+    const createdAt = nowIso();
+    const uid = this.allocateUids([role])[0]!;
+    const hashedPassword = await hashPassword(password, 'low');
+    const result = db.insert(users).values({
+      uid,
+      password: hashedPassword,
       role,
       name,
-      password: await hashPassword(password),
-      created_at: nowIso()
-    };
-
-    this.#state.users.push(user);
-    this.save();
+      createdAt,
+      deletedAt: null
+    }).run();
 
     return {
-      id: user.id,
-      uid: user.uid,
-      role: user.role,
-      name: user.name,
+      id: Number(result.lastInsertRowid),
+      uid,
+      role,
+      name,
       password
     };
   }
 
-  async createUsers(entries: Array<{ name: string; role: UserRole }>) {
-    const passwords = entries.map(() => generatePlainPassword());
-    const hashes = await Promise.all(passwords.map((password) => hashPassword(password)));
-    const timestamp = nowIso();
-    const results: CreateUserResult[] = [];
-
-    entries.forEach((entry, index) => {
-      const user: User = {
-        id: this.#state.nextId.users++,
-        uid: this.generateUid(entry.role),
-        role: entry.role,
-        name: entry.name,
-        password: hashes[index],
-        created_at: timestamp
-      };
-
-      this.#state.users.push(user);
-      results.push({
-        id: user.id,
-        uid: user.uid,
-        role: user.role,
-        name: user.name,
-        password: passwords[index]
-      });
-    });
-
-    this.save();
-    return results;
-  }
-
-  updateUserName(id: number, name: string) {
-    const user = this.findUserById(id);
-
-    if (!user) {
-      return false;
-    }
-
-    user.name = name;
-    this.save();
-    return true;
-  }
-
-  updateUserPassword(id: number, hashedPassword: string) {
-    const user = this.findUserById(id);
-
-    if (!user) {
-      return false;
-    }
-
-    user.password = hashedPassword;
-    this.save();
-    return true;
-  }
-
-  async resetUserPasswords(ids: number[]) {
-    const users = ids
-      .map((id) => this.findUserById(id))
-      .filter((user): user is User => Boolean(user));
-
-    if (users.length === 0) {
+  async createUsers(entries: Array<{ name: string; role: UserRole; teacherId?: number | null }>) {
+    if (entries.length === 0) {
       return [];
     }
 
-    const passwords = users.map(() => generatePlainPassword());
-    const hashes = await Promise.all(passwords.map((password) => hashPassword(password)));
+    const passwords = entries.map(() => generatePlainPassword());
+    const hashes = await hashPasswords(passwords, 'low');
+    const createdAt = nowIso();
+    const uids = this.allocateUids(entries.map((entry) => entry.role));
+    const rows = entries.map((entry, index) => ({
+      uid: uids[index]!,
+      password: hashes[index]!,
+      role: entry.role,
+      name: entry.name,
+      createdAt,
+      deletedAt: null as null
+    }));
 
-    const results = users.map((user, index) => {
-      user.password = hashes[index];
+    return db.transaction((tx) => {
+      const inserted = tx.insert(users).values(rows).run();
+      const lastInsertedId = Number(inserted.lastInsertRowid);
+      const firstInsertedId = lastInsertedId - rows.length + 1;
 
-      return {
-        id: user.id,
-        uid: user.uid,
-        role: user.role,
-        name: user.name,
-        password: passwords[index]
-      };
+      const createdAt = nowIso();
+      const assignments = entries.flatMap((entry, index) => {
+        const teacherId = entry.teacherId;
+
+        if (entry.role !== 'student' || !teacherId) {
+          return [];
+        }
+
+        return [{
+          teacherId,
+          studentId: firstInsertedId + index,
+          createdAt
+        }];
+      });
+
+      if (assignments.length > 0) {
+        tx.insert(teacherStudents).values(assignments).run();
+      }
+
+      return rows.map((row, index) => ({
+        id: firstInsertedId + index,
+        uid: row.uid,
+        role: row.role,
+        name: row.name,
+        password: passwords[index]!
+      }));
     });
+  }
 
-    this.save();
-    return results;
+  updateUserName(id: number, name: string) {
+    const result = db.update(users).set({ name }).where(activeUserById(id)).run();
+    return result.changes > 0;
+  }
+
+  updateUserPassword(id: number, hashedPassword: string) {
+    const result = db.update(users).set({ password: hashedPassword }).where(activeUserById(id)).run();
+    return result.changes > 0;
+  }
+
+  async resetUserPasswords(ids: number[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const activeUsers = db
+      .select({
+        id: users.id,
+        uid: users.uid,
+        role: users.role,
+        name: users.name
+      })
+      .from(users)
+      .where(and(inArray(users.id, ids), isNull(users.deletedAt)))
+      .all();
+
+    if (activeUsers.length === 0) {
+      return [];
+    }
+
+    const passwords = activeUsers.map(() => generatePlainPassword());
+    const hashes = await hashPasswords(passwords, 'low');
+
+    return db.transaction((tx) => {
+      return activeUsers.map((user, index) => {
+        tx.update(users).set({ password: hashes[index]! }).where(eq(users.id, user.id)).run();
+
+        return {
+          id: user.id,
+          uid: user.uid,
+          role: user.role as UserRole,
+          name: user.name,
+          password: passwords[index]!
+        };
+      });
+    });
   }
 
   deleteUser(id: number) {
-    const index = this.#state.users.findIndex((user) => user.id === id);
+    const user = db.select().from(users).where(activeUserById(id)).get();
 
-    if (index === -1) {
+    if (!user) {
       return false;
     }
 
-    const [user] = this.#state.users.splice(index, 1);
+    db.transaction((tx) => {
+      tx.update(practiceRecords)
+        .set({ studentUidSnapshot: user.uid })
+        .where(and(eq(practiceRecords.studentId, user.id), sql`${practiceRecords.studentUidSnapshot} is null`))
+        .run();
 
-    for (const record of this.#state.practice_records) {
-      if (record.student_id === user.id && !record.student_uid_snapshot) {
-        record.student_uid_snapshot = user.uid;
+      if (user.role === 'teacher') {
+        tx.delete(teacherStudents).where(eq(teacherStudents.teacherId, user.id)).run();
       }
-    }
 
-    if (user.role === 'teacher') {
-      this.#state.teacher_students = this.#state.teacher_students.filter((assignment) => assignment.teacher_id !== user.id);
-    }
+      tx.update(users).set({ deletedAt: nowIso() }).where(eq(users.id, user.id)).run();
+    });
 
-    this.save();
     return true;
   }
 
   getTeacherStudents(teacherId: number) {
-    const studentIds = new Set(this.getTeacherStudentIds(teacherId));
-
-    return this.#state.users
-      .filter((user) => user.role === 'student' && studentIds.has(user.id))
-      .map(({ id, uid, name, created_at }) => ({ id, uid, name, created_at }))
-      .sort((left, right) => right.id - left.id);
+    return db
+      .select({
+        id: users.id,
+        uid: users.uid,
+        name: users.name,
+        createdAt: users.createdAt
+      })
+      .from(teacherStudents)
+      .innerJoin(users, eq(teacherStudents.studentId, users.id))
+      .where(and(eq(teacherStudents.teacherId, teacherId), eq(users.role, 'student'), isNull(users.deletedAt)))
+      .orderBy(desc(users.id))
+      .all()
+      .map(toStudentSummary);
   }
 
   getTeacherStudentIds(teacherId: number) {
-    return this.#state.teacher_students
-      .filter((assignment) => assignment.teacher_id === teacherId)
-      .map((assignment) => assignment.student_id);
+    return db
+      .select({ studentId: teacherStudents.studentId })
+      .from(teacherStudents)
+      .where(eq(teacherStudents.teacherId, teacherId))
+      .all()
+      .map((row) => row.studentId);
   }
 
   getStudentTeacherId(studentId: number) {
-    return this.#state.teacher_students.find((assignment) => assignment.student_id === studentId)?.teacher_id ?? null;
+    return db
+      .select({ teacherId: teacherStudents.teacherId })
+      .from(teacherStudents)
+      .where(eq(teacherStudents.studentId, studentId))
+      .get()?.teacherId ?? null;
   }
 
   assignStudentsToTeacher(teacherId: number, studentIds: number[]) {
-    for (const studentId of studentIds) {
-      this.#state.teacher_students = this.#state.teacher_students.filter((assignment) => assignment.student_id !== studentId);
-      this.#state.teacher_students.push({ teacher_id: teacherId, student_id: studentId });
+    if (studentIds.length === 0) {
+      return;
     }
 
-    this.save();
+    const createdAt = nowIso();
+
+    db.transaction((tx) => {
+      tx.delete(teacherStudents).where(inArray(teacherStudents.studentId, studentIds)).run();
+      tx.insert(teacherStudents).values(studentIds.map((studentId) => ({
+        teacherId,
+        studentId,
+        createdAt
+      }))).run();
+    });
   }
 
   removeStudentsFromTeacher(teacherId: number, studentIds: number[]) {
-    const ids = new Set(studentIds);
-    this.#state.teacher_students = this.#state.teacher_students.filter((assignment) => {
-      return !(assignment.teacher_id === teacherId && ids.has(assignment.student_id));
-    });
+    if (studentIds.length === 0) {
+      return;
+    }
 
-    this.save();
+    db.delete(teacherStudents)
+      .where(and(eq(teacherStudents.teacherId, teacherId), inArray(teacherStudents.studentId, studentIds)))
+      .run();
   }
 
   getAllAssignments() {
-    return [...this.#state.teacher_students];
+    return db
+      .select({
+        teacher_id: teacherStudents.teacherId,
+        student_id: teacherStudents.studentId
+      })
+      .from(teacherStudents)
+      .innerJoin(users, eq(teacherStudents.teacherId, users.id))
+      .innerJoin(sql`users as student_users`, sql`${teacherStudents.studentId} = student_users.id`)
+      .where(and(isNull(users.deletedAt), eq(users.role, 'teacher'), sql`student_users.deleted_at is null`, sql`student_users.role = 'student'`))
+      .all() as TeacherStudentAssignment[];
   }
 
   createRecord(input: CreateRecordInput) {
-    const student = this.findUserById(input.student_id);
-    const timestamp = nowIso();
-    const record: PracticeRecord = {
-      id: this.#state.nextId.practice_records++,
-      student_id: input.student_id,
-      student_uid_snapshot: student?.uid ?? null,
+    const student = db.select({ uid: users.uid }).from(users).where(eq(users.id, input.student_id)).get();
+    const createdAt = nowIso();
+    const result = db.insert(practiceRecords).values({
+      studentId: input.student_id,
+      studentUidSnapshot: student?.uid ?? null,
       title: input.title,
       content: input.content,
-      practice_date: input.practice_date,
+      practiceDate: input.practice_date,
       location: input.location,
       duration: input.duration,
-      image_path: input.image_path,
+      imagePath: input.image_path,
       status: 'pending',
-      teacher_comment: null,
-      created_at: timestamp,
-      updated_at: timestamp,
-      updated_by_uid: null
-    };
+      teacherComment: null,
+      createdAt,
+      updatedAt: createdAt,
+      updatedByUid: null
+    }).run();
 
-    this.#state.practice_records.push(record);
-    this.save();
-    return record;
+    return this.getRecordById(Number(result.lastInsertRowid))!;
   }
 
   getRecordById(id: number) {
-    return this.#state.practice_records.find((record) => record.id === id) ?? null;
+    const row = db.select().from(practiceRecords).where(eq(practiceRecords.id, id)).get();
+    return row ? toPracticeRecord(row) : null;
   }
 
   getRecordsByStudent(studentId: number): StudentRecord[] {
-    return this.#state.practice_records
-      .filter((record) => record.student_id === studentId)
-      .map((record) => ({
-        ...record,
-        student_name: this.resolveStudentIdentity(record).student_name
-      }))
-      .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+    return db
+      .select({
+        record: practiceRecordColumns,
+        student_name: sql<string>`case when ${users.id} is null or ${users.deletedAt} is not null then ${deletedUserName} else ${users.name} end`
+      })
+      .from(practiceRecords)
+      .leftJoin(users, eq(practiceRecords.studentId, users.id))
+      .where(eq(practiceRecords.studentId, studentId))
+      .orderBy(desc(practiceRecords.createdAt))
+      .all()
+      .map((row) => ({
+        ...toPracticeRecord(row.record),
+        student_name: String(row.student_name)
+      }));
   }
 
   getTeacherRecordById(id: number, visibleStudentIds?: Set<number>) {
-    const record = this.getRecordById(id);
+    const where = buildRecordWhere({ student_id: null }, visibleStudentIds);
+    const record = db
+      .select({
+        record: practiceRecordColumns,
+        ...recordIdentitySelect()
+      })
+      .from(practiceRecords)
+      .leftJoin(users, eq(practiceRecords.studentId, users.id))
+      .where(and(eq(practiceRecords.id, id), where))
+      .get();
 
     if (!record) {
       return null;
     }
 
-    if (visibleStudentIds && !visibleStudentIds.has(record.student_id)) {
-      return null;
-    }
-
     return {
-      ...record,
-      ...this.resolveStudentIdentity(record)
-    };
+      ...toPracticeRecord(record.record),
+      student_name: String(record.student_name),
+      student_uid: String(record.student_uid)
+    } satisfies TeacherRecord;
   }
 
   getAllRecords(filters: RecordFilters = {}, visibleStudentIds?: Set<number>): TeacherRecordSummary[] {
-    let records = [...this.#state.practice_records];
+    const where = buildRecordWhere(filters, visibleStudentIds);
 
-    if (visibleStudentIds) {
-      records = records.filter((record) => visibleStudentIds.has(record.student_id));
-    }
-
-    if (filters.student_id) {
-      records = records.filter((record) => record.student_id === filters.student_id);
-    }
-
-    if (filters.teacher_id) {
-      records = records.filter((record) => this.getStudentTeacherId(record.student_id) === filters.teacher_id);
-    }
-
-    if (filters.status) {
-      records = records.filter((record) => record.status === filters.status);
-    }
-
-    if (filters.practice_after) {
-      records = records.filter((record) => record.practice_date >= filters.practice_after!);
-    }
-
-    if (filters.practice_before) {
-      records = records.filter((record) => record.practice_date <= filters.practice_before!);
-    }
-
-    if (filters.created_after) {
-      records = records.filter((record) => record.created_at >= filters.created_after!);
-    }
-
-    if (filters.created_before) {
-      records = records.filter((record) => record.created_at <= filters.created_before!);
-    }
-
-    if (filters.updated_after) {
-      records = records.filter((record) => record.updated_at >= filters.updated_after!);
-    }
-
-    if (filters.updated_before) {
-      records = records.filter((record) => record.updated_at <= filters.updated_before!);
-    }
-
-    return records
-      .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))
-      .map((record) => {
-        const identity = this.resolveStudentIdentity(record);
-
-        return {
-          id: record.id,
-          student_id: record.student_id,
-          title: record.title,
-          practice_date: record.practice_date,
-          status: record.status,
-          created_at: record.created_at,
-          student_name: identity.student_name,
-          student_uid: identity.student_uid
-        };
-      });
+    return db
+      .select({
+        id: practiceRecords.id,
+        student_id: practiceRecords.studentId,
+        title: practiceRecords.title,
+        practice_date: practiceRecords.practiceDate,
+        status: practiceRecords.status,
+        created_at: practiceRecords.createdAt,
+        ...recordIdentitySelect()
+      })
+      .from(practiceRecords)
+      .leftJoin(users, eq(practiceRecords.studentId, users.id))
+      .where(where)
+      .orderBy(desc(practiceRecords.createdAt))
+      .all()
+      .map((row) => ({
+        id: row.id,
+        student_id: row.student_id,
+        title: row.title,
+        practice_date: row.practice_date,
+        status: row.status as TeacherRecordSummary['status'],
+        created_at: row.created_at,
+        student_name: row.student_name,
+        student_uid: row.student_uid
+      }));
   }
 
   updateRecord(id: number, updates: UpdateRecordInput) {
-    const index = this.#state.practice_records.findIndex((record) => record.id === id);
+    const current = this.getRecordById(id);
 
-    if (index === -1) {
+    if (!current) {
       return null;
     }
 
-    const current = this.#state.practice_records[index];
-    const next: PracticeRecord = {
-      ...current,
-      ...updates,
-      updated_at: nowIso()
+    const nextValues: Partial<typeof practiceRecords.$inferInsert> = {
+      updatedAt: nowIso()
     };
 
-    this.#state.practice_records[index] = next;
-    this.save();
+    if (updates.title !== undefined) nextValues.title = updates.title;
+    if (updates.content !== undefined) nextValues.content = updates.content;
+    if (updates.practice_date !== undefined) nextValues.practiceDate = updates.practice_date;
+    if (updates.location !== undefined) nextValues.location = updates.location;
+    if (updates.duration !== undefined) nextValues.duration = updates.duration;
+    if (updates.image_path !== undefined) nextValues.imagePath = updates.image_path;
+    if (updates.status !== undefined) nextValues.status = updates.status;
+    if (updates.teacher_comment !== undefined) nextValues.teacherComment = updates.teacher_comment;
+    if (updates.updated_by_uid !== undefined) nextValues.updatedByUid = updates.updated_by_uid;
 
-    if (current.image_path !== next.image_path) {
-      this.removeUnusedUpload(current.image_path, next.id);
+    db.update(practiceRecords).set(nextValues).where(eq(practiceRecords.id, id)).run();
+
+    const updated = this.getRecordById(id);
+
+    if (current.image_path !== updated?.image_path) {
+      this.removeUnusedUpload(current.image_path, id);
     }
 
-    return next;
+    return updated;
   }
 
   deleteRecord(id: number) {
-    const index = this.#state.practice_records.findIndex((record) => record.id === id);
+    const current = this.getRecordById(id);
 
-    if (index === -1) {
+    if (!current) {
       return false;
     }
 
-    const [removed] = this.#state.practice_records.splice(index, 1);
-    this.save();
-    this.removeUnusedUpload(removed.image_path);
+    db.delete(practiceRecords).where(eq(practiceRecords.id, id)).run();
+    this.removeUnusedUpload(current.image_path);
     return true;
   }
 
   countStudentRecordsToday(studentId: number) {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
-    const startMs = start.getTime();
 
-    return this.#state.practice_records.filter((record) => {
-      return record.student_id === studentId && Date.parse(record.created_at) >= startMs;
-    }).length;
+    const row = db
+      .select({ count: sql<number>`count(*)` })
+      .from(practiceRecords)
+      .where(and(eq(practiceRecords.studentId, studentId), gte(practiceRecords.createdAt, start.toISOString())))
+      .get();
+
+    return toFiniteNumber(row?.count);
   }
 
   createNotification(studentId: number, type: NotificationType, message: string) {
-    const notification: AppNotification = {
-      id: this.#state.nextId.notifications++,
+    const createdAt = nowIso();
+    const result = db.insert(notifications).values({
+      studentId,
+      type,
+      message,
+      isRead: false,
+      createdAt
+    }).run();
+
+    return {
+      id: Number(result.lastInsertRowid),
       student_id: studentId,
       type,
       message,
       is_read: false,
-      created_at: nowIso()
+      created_at: createdAt
     };
-
-    this.#state.notifications.push(notification);
-    this.save();
-    return notification;
   }
 
   getNotificationsByStudent(studentId: number) {
-    return this.#state.notifications
-      .filter((notification) => notification.student_id === studentId)
-      .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+    return db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.studentId, studentId))
+      .orderBy(desc(notifications.createdAt))
+      .all()
+      .map(toNotification);
   }
 
   getUnreadNotificationCount(studentId: number) {
-    return this.#state.notifications.filter((notification) => {
-      return notification.student_id === studentId && !notification.is_read;
-    }).length;
+    const row = db
+      .select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(and(eq(notifications.studentId, studentId), eq(notifications.isRead, false)))
+      .get();
+
+    return toFiniteNumber(row?.count);
   }
 
   markNotificationsAsRead(studentId: number) {
-    let changed = false;
-
-    for (const notification of this.#state.notifications) {
-      if (notification.student_id === studentId && !notification.is_read) {
-        notification.is_read = true;
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      this.save();
-    }
+    db.update(notifications).set({ isRead: true }).where(and(eq(notifications.studentId, studentId), eq(notifications.isRead, false))).run();
   }
 
   getStudentStatistics(studentId: number) {
-    return this.calculateRecordStatistics(
-      this.#state.practice_records.filter((record) => record.student_id === studentId)
-    );
+    return this.calculateRecordStatistics(eq(practiceRecords.studentId, studentId));
   }
 
   getStatistics(visibleStudentIds?: Set<number>): TeacherStatistics {
-    const students = visibleStudentIds
-      ? this.#state.users.filter((user) => user.role === 'student' && visibleStudentIds.has(user.id))
-      : this.#state.users.filter((user) => user.role === 'student');
+    const studentConditions = [eq(users.role, 'student'), isNull(users.deletedAt)];
 
-    const records = visibleStudentIds
-      ? this.#state.practice_records.filter((record) => visibleStudentIds.has(record.student_id))
-      : this.#state.practice_records;
+    if (visibleStudentIds) {
+      const ids = [...visibleStudentIds];
+      studentConditions.push(ids.length > 0 ? inArray(users.id, ids) : sql`1 = 0`);
+    }
 
-    const base = this.calculateRecordStatistics(records);
+    const studentsList = db
+      .select({
+        id: users.id,
+        uid: users.uid,
+        name: users.name
+      })
+      .from(users)
+      .where(and(...studentConditions))
+      .all();
 
-    const student_durations = students
-      .map((student) => ({
-        student_id: student.id,
-        student_name: student.name,
-        student_uid: student.uid,
-        total_duration: records.reduce((total, record) => {
-          if (record.student_id !== student.id || record.status !== 'approved') {
-            return total;
-          }
+    const recordStats = this.calculateRecordStatistics(buildRecordWhere({}, visibleStudentIds));
 
-          return total + record.duration;
-        }, 0)
-      }))
+    const studentDurations = studentsList
+      .map((student) => {
+        const row = db
+          .select({
+            total: sql<number>`coalesce(sum(case when ${practiceRecords.status} = 'approved' then ${practiceRecords.duration} else 0 end), 0)`
+          })
+          .from(practiceRecords)
+          .where(eq(practiceRecords.studentId, student.id))
+          .get();
+
+        return {
+          student_id: student.id,
+          student_name: student.name,
+          student_uid: student.uid,
+          total_duration: toFiniteNumber(row?.total)
+        };
+      })
       .sort((left, right) => {
         if (right.total_duration !== left.total_duration) {
           return right.total_duration - left.total_duration;
@@ -713,101 +723,105 @@ class JsonDatabase {
       });
 
     return {
-      ...base,
-      student_count: students.length,
-      student_durations
+      ...recordStats,
+      student_count: studentsList.length,
+      student_durations: studentDurations
     };
   }
 
-  #loadFromDisk() {
-    if (!fs.existsSync(dbPath)) {
-      return createEmptyState();
-    }
+  private calculateRecordStatistics(where?: ReturnType<typeof buildRecordWhere> | ReturnType<typeof eq>) {
+    const row = db
+      .select({
+        total_records: sql<number>`count(*)`,
+        pending_count: sql<number>`sum(case when ${practiceRecords.status} = 'pending' then 1 else 0 end)`,
+        approved_count: sql<number>`sum(case when ${practiceRecords.status} = 'approved' then 1 else 0 end)`,
+        rejected_count: sql<number>`sum(case when ${practiceRecords.status} = 'rejected' then 1 else 0 end)`,
+        total_duration: sql<number>`coalesce(sum(case when ${practiceRecords.status} = 'approved' then ${practiceRecords.duration} else 0 end), 0)`
+      })
+      .from(practiceRecords)
+      .where(where)
+      .get();
 
-    try {
-      const raw = JSON.parse(fs.readFileSync(dbPath, 'utf8')) as unknown;
-      return sanitizeState(raw);
-    } catch (error) {
-      console.warn('数据库文件解析失败，将使用新的数据存储。', error);
-      return createEmptyState();
-    }
-  }
-
-  private load() {
-    this.#state = this.#loadFromDisk();
-  }
-
-  private save() {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-    fs.writeFileSync(dbPath, JSON.stringify(this.#state, null, 2), 'utf8');
+    return {
+      total_records: toFiniteNumber(row?.total_records),
+      pending_count: toFiniteNumber(row?.pending_count),
+      approved_count: toFiniteNumber(row?.approved_count),
+      rejected_count: toFiniteNumber(row?.rejected_count),
+      total_duration: toFiniteNumber(row?.total_duration)
+    } satisfies RecordStatistics;
   }
 
   private seedDefaults() {
-    if (this.#state.users.length > 0) {
+    const row = db.select({ count: sql<number>`count(*)` }).from(users).get();
+
+    if (toFiniteNumber(row?.count) > 0) {
       return;
     }
 
-    const password = hashPasswordSync('12345678');
-    const timestamp = nowIso();
+    const password = hashPasswordSync('12345678', 'low');
+    const createdAt = nowIso();
 
-    this.#state.users.push(
+    db.insert(users).values([
       {
-        id: this.#state.nextId.users++,
-        uid: this.generateUid('admin'),
+        uid: 'A00001',
+        password,
         role: 'admin',
         name: '超级奶龙',
-        password,
-        created_at: timestamp
+        createdAt,
+        deletedAt: null
       },
       {
-        id: this.#state.nextId.users++,
-        uid: this.generateUid('teacher'),
+        uid: 'T00001',
+        password,
         role: 'teacher',
         name: '教师一',
-        password,
-        created_at: timestamp
+        createdAt,
+        deletedAt: null
       },
       {
-        id: this.#state.nextId.users++,
-        uid: this.generateUid('student'),
+        uid: 'S00001',
+        password,
         role: 'student',
         name: '学生一',
-        password,
-        created_at: timestamp
+        createdAt,
+        deletedAt: null
       },
       {
-        id: this.#state.nextId.users++,
-        uid: this.generateUid('student'),
+        uid: 'S00002',
+        password,
         role: 'student',
         name: '学生二',
-        password,
-        created_at: timestamp
+        createdAt,
+        deletedAt: null
       }
-    );
-
-    this.save();
+    ]).run();
   }
 
-  private generateUid(role: UserRole) {
-    const prefix = rolePrefixes[role];
-    const next = this.#state.nextUidNumber[role]++;
-    return `${prefix}${next.toString(16).padStart(5, '0')}`;
-  }
+  private allocateUids(roles: UserRole[]) {
+    const nextNumbers = new Map<UserRole, number>();
 
-  private resolveStudentIdentity(record: Pick<PracticeRecord, 'student_id' | 'student_uid_snapshot'>) {
-    const student = this.findUserById(record.student_id);
+    for (const role of new Set(roles)) {
+      const latest = db
+        .select({ uid: users.uid })
+        .from(users)
+        .where(eq(users.role, role))
+        .orderBy(desc(users.id))
+        .limit(1)
+        .get();
 
-    if (student) {
-      return {
-        student_name: student.name,
-        student_uid: student.uid
-      };
+      nextNumbers.set(role, latest ? this.parseUidNumber(latest.uid) + 1 : 1);
     }
 
-    return {
-      student_name: deletedUserName,
-      student_uid: record.student_uid_snapshot ?? ''
-    };
+    return roles.map((role) => {
+      const nextNumber = nextNumbers.get(role) ?? 1;
+      nextNumbers.set(role, nextNumber + 1);
+      return `${rolePrefixes[role]}${nextNumber.toString(16).padStart(5, '0')}`;
+    });
+  }
+
+  private parseUidNumber(uid: string) {
+    const numeric = Number.parseInt(uid.slice(1), 16);
+    return Number.isFinite(numeric) ? numeric : 0;
   }
 
   private resolveUploadFilePath(imagePath: string) {
@@ -816,12 +830,7 @@ class JsonDatabase {
     }
 
     const filePath = path.join(uploadDir, path.basename(imagePath));
-
-    if (!filePath.startsWith(uploadDir)) {
-      return null;
-    }
-
-    return filePath;
+    return filePath.startsWith(uploadDir) ? filePath : null;
   }
 
   private removeUploadFile(imagePath: string | null) {
@@ -831,11 +840,9 @@ class JsonDatabase {
 
     const filePath = this.resolveUploadFilePath(imagePath);
 
-    if (!filePath || !fs.existsSync(filePath)) {
-      return;
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
     }
-
-    fs.unlinkSync(filePath);
   }
 
   private removeUnusedUpload(imagePath: string | null, ignoredRecordId?: number) {
@@ -843,28 +850,24 @@ class JsonDatabase {
       return;
     }
 
-    const stillUsed = this.#state.practice_records.some((record) => {
-      return record.id !== ignoredRecordId && record.image_path === imagePath;
-    });
+    const conditions = [eq(practiceRecords.imagePath, imagePath)];
 
-    if (!stillUsed) {
+    if (ignoredRecordId !== undefined) {
+      conditions.push(sql`${practiceRecords.id} != ${ignoredRecordId}`);
+    }
+
+    const row = db
+      .select({ count: sql<number>`count(*)` })
+      .from(practiceRecords)
+      .where(and(...conditions))
+      .get();
+
+    if (toFiniteNumber(row?.count) === 0) {
       this.removeUploadFile(imagePath);
     }
   }
-
-  private calculateRecordStatistics(records: Pick<PracticeRecord, 'status' | 'duration'>[]): RecordStatistics {
-    return {
-      total_records: records.length,
-      pending_count: records.filter((record) => record.status === 'pending').length,
-      approved_count: records.filter((record) => record.status === 'approved').length,
-      rejected_count: records.filter((record) => record.status === 'rejected').length,
-      total_duration: records.reduce((total, record) => {
-        return record.status === 'approved' ? total + record.duration : total;
-      }, 0)
-    };
-  }
 }
 
-const database = new JsonDatabase();
+const database = new SQLiteDatabase();
 
 export default database;

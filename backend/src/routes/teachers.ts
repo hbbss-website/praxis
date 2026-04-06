@@ -1,4 +1,6 @@
-import { Elysia } from 'elysia';
+import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
+import { z } from 'zod';
 
 import { hashPassword } from '../auth/password';
 import database from '../database';
@@ -7,7 +9,6 @@ import {
   batchResetPasswordBodySchema,
   batchReviewBodySchema,
   buildReviewNotificationMessage,
-  idParamSchema,
   isValidUploadPath,
   normalizeOptionalString,
   normalizeRecordFilters,
@@ -25,10 +26,15 @@ import {
   validatePassword,
   validatePracticeDate,
   validateRecordFilters,
-  validateTitle
+  validateTitle,
+  validationHook
 } from '../http';
-import { authPlugin } from '../plugins/auth';
+import { authMiddleware, type AppBindings } from '../plugins/auth';
 import type { RecordFilters, UpdateRecordInput, UserRole } from '../models';
+
+const recordIdParamSchema = z.object({
+  id: z.string().regex(/^[1-9]\d*$/)
+});
 
 function getVisibleStudentIds(userId: number, role: UserRole) {
   if (role === 'admin') {
@@ -60,57 +66,66 @@ function parseRecordFilters(query: Record<string, unknown>): RecordFilters {
   });
 }
 
-export const teacherRoutes = new Elysia({ prefix: '/teacher' })
-  .use(authPlugin)
-  .guard({
-    beforeHandle: ({ user, authError }) => requireRole(user, authError, ['teacher', 'admin'])
+export const teacherRoutes = new Hono<AppBindings>()
+  .use('/teacher/*', authMiddleware)
+  .use('/teacher/*', async (c, next) => {
+    const authFailure = requireRole(c, ['teacher', 'admin']);
+
+    if (authFailure) {
+      return authFailure;
+    }
+
+    await next();
   })
-  .get('/records', ({ query, user }) => {
+  .get('/teacher/records', zValidator('query', recordQuerySchema, validationHook), (c) => {
+    const query = c.req.valid('query');
+    const user = c.get('user')!;
     const filterError = validateRecordFilters(query as Record<string, unknown>);
 
     if (filterError) {
-      return apiError(400, filterError);
+      return apiError(c, 400, filterError);
     }
 
-    return {
-      records: database.getAllRecords(parseRecordFilters(query as Record<string, unknown>), getVisibleStudentIds(user!.id, user!.role))
-    };
-  }, {
-    query: recordQuerySchema
+    return c.json({
+      records: database.getAllRecords(parseRecordFilters(query as Record<string, unknown>), getVisibleStudentIds(user.id, user.role))
+    });
   })
-  .get('/records/:id', ({ params, user }) => {
-    const record = database.getTeacherRecordById(Number(params.id), getVisibleStudentIds(user!.id, user!.role));
+  .get('/teacher/records/:id', zValidator('param', recordIdParamSchema, validationHook), (c) => {
+    const id = Number(c.req.valid('param').id);
+    const user = c.get('user')!;
+    const record = database.getTeacherRecordById(id, getVisibleStudentIds(user.id, user.role));
 
     if (!record) {
-      return apiError(404, '记录不存在。');
+      return apiError(c, 404, '记录不存在。');
     }
 
-    return { record };
-  }, {
-    params: idParamSchema
+    return c.json({ record });
   })
-  .put('/records/:id/review', ({ params, body, user }) => {
-    const record = database.getTeacherRecordById(Number(params.id), getVisibleStudentIds(user!.id, user!.role));
+  .put('/teacher/records/:id/review', zValidator('param', recordIdParamSchema, validationHook), zValidator('json', reviewRecordBodySchema, validationHook), (c) => {
+    const id = Number(c.req.valid('param').id);
+    const body = c.req.valid('json');
+    const user = c.get('user')!;
+    const record = database.getTeacherRecordById(id, getVisibleStudentIds(user.id, user.role));
 
     if (!record) {
-      return apiError(404, '记录不存在。');
+      return apiError(c, 404, '记录不存在。');
     }
 
     const comment = normalizeOptionalString(body.comment);
     const commentError = validateComment(comment);
 
     if (commentError) {
-      return apiError(400, commentError);
+      return apiError(c, 400, commentError);
     }
 
     const updated = database.updateRecord(record.id, {
       status: body.status,
       teacher_comment: comment,
-      updated_by_uid: user!.uid
+      updated_by_uid: user.uid
     });
 
     if (!updated) {
-      return apiError(404, '记录不存在。');
+      return apiError(c, 404, '记录不存在。');
     }
 
     database.createNotification(
@@ -119,13 +134,12 @@ export const teacherRoutes = new Elysia({ prefix: '/teacher' })
       buildReviewNotificationMessage(updated.title, body.status)
     );
 
-    return { message: '审核结果保存成功。' };
-  }, {
-    body: reviewRecordBodySchema,
-    params: idParamSchema
+    return c.json({ message: '审核结果保存成功。' });
   })
-  .post('/records/batch-review', ({ body, user }) => {
-    const visibleStudentIds = getVisibleStudentIds(user!.id, user!.role);
+  .post('/teacher/record-reviews/batch', zValidator('json', batchReviewBodySchema, validationHook), (c) => {
+    const body = c.req.valid('json');
+    const user = c.get('user')!;
+    const visibleStudentIds = getVisibleStudentIds(user.id, user.role);
     let successCount = 0;
 
     for (const id of body.ids) {
@@ -142,7 +156,7 @@ export const teacherRoutes = new Elysia({ prefix: '/teacher' })
         database.updateRecord(record.id, {
           status: body.action,
           teacher_comment: null,
-          updated_by_uid: user!.uid
+          updated_by_uid: user.uid
         });
         database.createNotification(
           record.student_id,
@@ -154,53 +168,54 @@ export const teacherRoutes = new Elysia({ prefix: '/teacher' })
       successCount += 1;
     }
 
-    return { message: `成功处理 ${successCount} 条记录。` };
-  }, {
-    body: batchReviewBodySchema
+    return c.json({ message: `成功处理 ${successCount} 条记录。` });
   })
-  .put('/records/:id', ({ params, body, user }) => {
-    const record = database.getTeacherRecordById(Number(params.id), getVisibleStudentIds(user!.id, user!.role));
+  .put('/teacher/records/:id', zValidator('param', recordIdParamSchema, validationHook), zValidator('json', updateRecordBodySchema, validationHook), (c) => {
+    const id = Number(c.req.valid('param').id);
+    const body = c.req.valid('json');
+    const user = c.get('user')!;
+    const record = database.getTeacherRecordById(id, getVisibleStudentIds(user.id, user.role));
 
     if (!record) {
-      return apiError(404, '记录不存在。');
+      return apiError(c, 404, '记录不存在。');
     }
 
     const updates: UpdateRecordInput = {
-      updated_by_uid: user!.uid
+      updated_by_uid: user.uid
     };
 
     if (body.title !== undefined) {
       const value = body.title.trim();
       const error = validateTitle(value);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       updates.title = value;
     }
 
     if (body.content !== undefined) {
       const value = body.content.trim();
       const error = validateContent(value);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       updates.content = value;
     }
 
     if (body.practice_date !== undefined) {
       const value = body.practice_date.trim();
       const error = validatePracticeDate(value);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       updates.practice_date = value;
     }
 
     if (body.location !== undefined) {
       const value = normalizeOptionalString(body.location);
       const error = validateLocation(value);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       updates.location = value;
     }
 
     if (body.duration !== undefined) {
       const value = parseDuration(body.duration);
       const error = validateDuration(value);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       updates.duration = value;
     }
 
@@ -208,96 +223,98 @@ export const teacherRoutes = new Elysia({ prefix: '/teacher' })
       const value = normalizeOptionalString(body.image_path);
 
       if (value && !isValidUploadPath(value)) {
-        return apiError(400, '图片路径无效。');
+        return apiError(c, 400, '图片路径无效。');
       }
 
       updates.image_path = value;
     }
 
     database.updateRecord(record.id, updates);
-    return { message: '记录更新成功。' };
-  }, {
-    body: updateRecordBodySchema,
-    params: idParamSchema
+    return c.json({ message: '记录更新成功。' });
   })
-  .delete('/records/:id', ({ params, user }) => {
-    const record = database.getTeacherRecordById(Number(params.id), getVisibleStudentIds(user!.id, user!.role));
+  .delete('/teacher/records/:id', zValidator('param', recordIdParamSchema, validationHook), (c) => {
+    const id = Number(c.req.valid('param').id);
+    const user = c.get('user')!;
+    const record = database.getTeacherRecordById(id, getVisibleStudentIds(user.id, user.role));
 
     if (!record) {
-      return apiError(404, '记录不存在。');
+      return apiError(c, 404, '记录不存在。');
     }
 
     database.deleteRecord(record.id);
     database.createNotification(record.student_id, 'deleted', `你的实践记录 "${record.title}" 已被删除。`);
-    return { message: '记录删除成功。' };
-  }, {
-    params: idParamSchema
+    return c.json({ message: '记录删除成功。' });
   })
-  .get('/students', ({ user }) => ({
-    students: user!.role === 'admin'
-      ? database.getAllStudents()
-      : database.getTeacherStudents(user!.id)
-  }))
-  .get('/students/:id/records', ({ params, user }) => {
-    const studentId = Number(params.id);
+  .get('/teacher/students', (c) => {
+    const user = c.get('user')!;
 
-    if (!canManageStudent(studentId, user!.id, user!.role)) {
-      return apiError(403, '无权查看该学生。');
+    return c.json({
+      students: user.role === 'admin'
+        ? database.getAllStudents()
+        : database.getTeacherStudents(user.id)
+    });
+  })
+  .get('/teacher/students/:id/records', zValidator('param', recordIdParamSchema, validationHook), (c) => {
+    const studentId = Number(c.req.valid('param').id);
+    const user = c.get('user')!;
+
+    if (!canManageStudent(studentId, user.id, user.role)) {
+      return apiError(c, 403, '无权查看该学生。');
     }
 
-    return {
+    return c.json({
       records: database.getRecordsByStudent(studentId)
-    };
-  }, {
-    params: idParamSchema
+    });
   })
-  .put('/students/:id', async ({ params, body, user }) => {
-    const studentId = Number(params.id);
+  .put('/teacher/students/:id', zValidator('param', recordIdParamSchema, validationHook), zValidator('json', updateUserBodySchema, validationHook), async (c) => {
+    const studentId = Number(c.req.valid('param').id);
+    const body = c.req.valid('json');
+    const user = c.get('user')!;
     const student = database.findUserById(studentId);
 
     if (!student || student.role !== 'student') {
-      return apiError(404, '学生不存在。');
+      return apiError(c, 404, '学生不存在。');
     }
 
-    if (!canManageStudent(studentId, user!.id, user!.role)) {
-      return apiError(403, '无权管理该学生。');
+    if (!canManageStudent(studentId, user.id, user.role)) {
+      return apiError(c, 403, '无权管理该学生。');
     }
 
     if (body.name !== undefined) {
       const error = validateName(body.name);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       database.updateUserName(studentId, body.name.trim());
     }
 
     if (body.password !== undefined && body.password !== '') {
       const error = validatePassword(body.password);
-      if (error) return apiError(400, error);
+      if (error) return apiError(c, 400, error);
       database.updateUserPassword(studentId, await hashPassword(body.password));
     }
 
-    return { message: '学生信息更新成功。' };
-  }, {
-    body: updateUserBodySchema,
-    params: idParamSchema
+    return c.json({ message: '学生信息更新成功。' });
   })
-  .patch('/students/password', async ({ body, user }) => {
-    const ids = user!.role === 'admin'
+  .patch('/teacher/students/password-reset', zValidator('json', batchResetPasswordBodySchema, validationHook), async (c) => {
+    const body = c.req.valid('json');
+    const user = c.get('user')!;
+    const ids = user.role === 'admin'
       ? body.ids
-      : body.ids.filter((id) => canManageStudent(id, user!.id, user!.role));
+      : body.ids.filter((id: number) => canManageStudent(id, user.id, user.role));
 
     if (ids.length === 0) {
-      return apiError(400, '请选择至少一个可管理的学生。');
+      return apiError(c, 400, '请选择至少一个可管理的学生。');
     }
 
     const users = await database.resetUserPasswords(ids);
 
-    return {
+    return c.json({
       message: `成功重置 ${users.length} 个学生的密码。`,
       users
-    };
-  }, {
-    body: batchResetPasswordBodySchema
+    });
   })
-  .get('/statistics', ({ user }) => ({
-    statistics: database.getStatistics(getVisibleStudentIds(user!.id, user!.role))
-  }));
+  .get('/teacher/statistics', (c) => {
+    const user = c.get('user')!;
+    return c.json({
+      statistics: database.getStatistics(getVisibleStudentIds(user.id, user.role))
+    });
+  });

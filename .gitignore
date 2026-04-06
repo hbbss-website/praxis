@@ -1,7 +1,7 @@
 node_modules/
 
 backend/uploads/
-backend/database.json
+backend/data/
 
 frontend/dist/
 

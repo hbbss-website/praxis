@@ -1,8 +1,10 @@
-export type UserRole = 'admin' | 'teacher' | 'student';
+export const userRoles = ['admin', 'teacher', 'student'] as const;
+export const recordStatuses = ['approved', 'pending', 'rejected'] as const;
+export const notificationTypes = ['approved', 'rejected', 'deleted', 'other'] as const;
 
-export type RecordStatus = 'approved' | 'pending' | 'rejected';
-
-export type NotificationType = 'approved' | 'rejected' | 'deleted' | 'other';
+export type UserRole = typeof userRoles[number];
+export type RecordStatus = typeof recordStatuses[number];
+export type NotificationType = typeof notificationTypes[number];
 
 export interface AppNotification {
   id: number;
@@ -27,11 +29,14 @@ export interface PublicUser {
   uid: string;
   role: UserRole;
   name: string;
+  password_setup_required: boolean;
 }
 
 export interface AuthTokenPayload extends PublicUser {
   exp?: number;
   iat?: number;
+  iss?: string;
+  aud?: string | string[];
 }
 
 export interface StudentSummary {
@@ -165,17 +170,4 @@ export interface CsvImportPreview {
   totalCount: number;
   studentCount: number;
   entries: CsvImportEntry[];
-}
-
-export interface DatabaseState {
-  users: User[];
-  practice_records: PracticeRecord[];
-  notifications: AppNotification[];
-  teacher_students: TeacherStudentAssignment[];
-  nextId: {
-    users: number;
-    practice_records: number;
-    notifications: number;
-  };
-  nextUidNumber: Record<UserRole, number>;
 }

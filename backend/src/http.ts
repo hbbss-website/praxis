@@ -1,8 +1,11 @@
-import { status, t } from 'elysia';
+import type { Context } from 'hono';
+import { z } from 'zod';
 
-import type { AuthTokenPayload, PublicUser, RecordFilters, RecordStatus, UserRole } from './models';
+import type { PublicUser, RecordFilters, RecordStatus, UserRole } from './models';
+import { notificationTypes, recordStatuses, userRoles } from './models';
+import type { AppBindings } from './plugins/auth';
 
-const positiveIdPattern = '^[1-9]\\d*$';
+const positiveIdPattern = /^[1-9]\d*$/;
 const uploadPathPattern = /^\/uploads\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -12,132 +15,121 @@ export const LOCATION_MAX_LENGTH = 120;
 export const CONTENT_MAX_LENGTH = 5000;
 export const COMMENT_MAX_LENGTH = 500;
 export const PASSWORD_MIN_LENGTH = 8;
-export const PASSWORD_MAX_LENGTH = 128;
+export const PASSWORD_MAX_LENGTH = 32;
 export const UID_MAX_LENGTH = 32;
 export const MAX_RECORD_DURATION = 24;
 
-export const userRoleSchema = t.Union([
-  t.Literal('admin'),
-  t.Literal('teacher'),
-  t.Literal('student')
-]);
+export const userRoleSchema = z.enum(userRoles);
+export const recordStatusSchema = z.enum(recordStatuses);
+export const notificationTypeSchema = z.enum(notificationTypes);
+const requiredPasswordSchema = z
+  .string()
+  .min(1, '密码不能为空。')
+  .max(PASSWORD_MAX_LENGTH, `密码不能超过 ${PASSWORD_MAX_LENGTH} 位。`);
+const optionalPasswordSchema = z
+  .string()
+  .max(PASSWORD_MAX_LENGTH, `密码不能超过 ${PASSWORD_MAX_LENGTH} 位。`);
 
-export const recordStatusSchema = t.Union([
-  t.Literal('approved'),
-  t.Literal('pending'),
-  t.Literal('rejected')
-]);
-
-export const notificationTypeSchema = t.Union([
-  t.Literal('approved'),
-  t.Literal('rejected'),
-  t.Literal('deleted'),
-  t.Literal('other')
-]);
-
-export const authUserSchema = t.Object({
-  id: t.Number(),
-  uid: t.String(),
-  role: userRoleSchema,
-  name: t.String()
+export const idParamSchema = z.object({
+  id: z.string().regex(positiveIdPattern)
 });
 
-export const idParamSchema = t.Object({
-  id: t.String({ pattern: positiveIdPattern })
+export const roleQuerySchema = z.object({
+  role: userRoleSchema.optional()
 });
 
-export const roleQuerySchema = t.Object({
-  role: t.Optional(userRoleSchema)
+export const loginBodySchema = z.object({
+  uid: z.string().min(1).max(UID_MAX_LENGTH),
+  password: requiredPasswordSchema
 });
 
-export const loginBodySchema = t.Object({
-  uid: t.String({ minLength: 1, maxLength: UID_MAX_LENGTH }),
-  password: t.String({ minLength: 1, maxLength: PASSWORD_MAX_LENGTH })
+export const profileBodySchema = z.object({
+  current_password: requiredPasswordSchema,
+  name: z.string().min(1).max(USER_NAME_MAX_LENGTH)
 });
 
-export const profileBodySchema = t.Object({
-  current_password: t.String({ minLength: 1, maxLength: PASSWORD_MAX_LENGTH }),
-  name: t.String({ minLength: 1, maxLength: USER_NAME_MAX_LENGTH })
+export const passwordBodySchema = z.object({
+  current_password: requiredPasswordSchema,
+  new_password: requiredPasswordSchema
 });
 
-export const passwordBodySchema = t.Object({
-  current_password: t.String({ minLength: 1, maxLength: PASSWORD_MAX_LENGTH }),
-  new_password: t.String({ minLength: 1, maxLength: PASSWORD_MAX_LENGTH })
+export const updateUserBodySchema = z.object({
+  name: z.string().min(1).max(USER_NAME_MAX_LENGTH).optional(),
+  password: optionalPasswordSchema.optional()
 });
 
-export const updateUserBodySchema = t.Object({
-  name: t.Optional(t.String({ minLength: 1, maxLength: USER_NAME_MAX_LENGTH })),
-  password: t.Optional(t.String({ maxLength: PASSWORD_MAX_LENGTH }))
+export const batchResetPasswordBodySchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1)
 });
 
-export const batchResetPasswordBodySchema = t.Object({
-  ids: t.Array(t.Number({ minimum: 1 }), { minItems: 1, uniqueItems: true })
+export const batchDeleteUsersBodySchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1)
 });
 
-export const batchDeleteUsersBodySchema = t.Object({
-  ids: t.Array(t.Number({ minimum: 1 }), { minItems: 1, uniqueItems: true })
+export const assignmentBodySchema = z.object({
+  teacher_id: z.number().int().positive(),
+  student_ids: z.array(z.number().int().positive()).min(1)
 });
 
-export const assignmentBodySchema = t.Object({
-  teacher_id: t.Number({ minimum: 1 }),
-  student_ids: t.Array(t.Number({ minimum: 1 }), { minItems: 1, uniqueItems: true })
+export const createRecordBodySchema = z.object({
+  title: z.string().min(1).max(TITLE_MAX_LENGTH),
+  content: z.string().min(1).max(CONTENT_MAX_LENGTH),
+  practice_date: z.string().min(1).max(10),
+  location: z.string().max(LOCATION_MAX_LENGTH).nullable().optional(),
+  duration: z.union([z.string().min(1).max(16), z.number()]),
+  image_path: z.string().nullable().optional()
 });
 
-export const createRecordBodySchema = t.Object({
-  title: t.String({ minLength: 1, maxLength: TITLE_MAX_LENGTH }),
-  content: t.String({ minLength: 1, maxLength: CONTENT_MAX_LENGTH }),
-  practice_date: t.String({ minLength: 1, maxLength: 10 }),
-  location: t.Optional(t.Nullable(t.String({ maxLength: LOCATION_MAX_LENGTH }))),
-  duration: t.Union([t.String({ minLength: 1, maxLength: 16 }), t.Number()]),
-  image_path: t.Optional(t.Nullable(t.String()))
+export const updateRecordBodySchema = z.object({
+  title: z.string().min(1).max(TITLE_MAX_LENGTH).optional(),
+  content: z.string().min(1).max(CONTENT_MAX_LENGTH).optional(),
+  practice_date: z.string().min(1).max(10).optional(),
+  location: z.string().max(LOCATION_MAX_LENGTH).nullable().optional(),
+  duration: z.union([z.string().min(1).max(16), z.number()]).optional(),
+  image_path: z.string().nullable().optional()
 });
 
-export const updateRecordBodySchema = t.Object({
-  title: t.Optional(t.String({ minLength: 1, maxLength: TITLE_MAX_LENGTH })),
-  content: t.Optional(t.String({ minLength: 1, maxLength: CONTENT_MAX_LENGTH })),
-  practice_date: t.Optional(t.String({ minLength: 1, maxLength: 10 })),
-  location: t.Optional(t.Nullable(t.String({ maxLength: LOCATION_MAX_LENGTH }))),
-  duration: t.Optional(t.Union([t.String({ minLength: 1, maxLength: 16 }), t.Number()])),
-  image_path: t.Optional(t.Nullable(t.String()))
-});
-
-export const reviewRecordBodySchema = t.Object({
+export const reviewRecordBodySchema = z.object({
   status: recordStatusSchema,
-  comment: t.Optional(t.String({ maxLength: COMMENT_MAX_LENGTH }))
+  comment: z.string().max(COMMENT_MAX_LENGTH).optional()
 });
 
-export const batchReviewBodySchema = t.Object({
-  ids: t.Array(t.Number({ minimum: 1 }), { minItems: 1, uniqueItems: true }),
-  action: t.Union([
-    t.Literal('approved'),
-    t.Literal('rejected'),
-    t.Literal('pending'),
-    t.Literal('deleted')
-  ])
+export const batchReviewBodySchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1),
+  action: z.enum(['approved', 'rejected', 'pending', 'deleted'])
 });
 
-export const recordQuerySchema = t.Object({
-  student_id: t.Optional(t.String({ pattern: positiveIdPattern })),
-  teacher_id: t.Optional(t.String({ pattern: positiveIdPattern })),
-  status: t.Optional(recordStatusSchema),
-  practice_after: t.Optional(t.String()),
-  practice_before: t.Optional(t.String()),
-  created_after: t.Optional(t.String()),
-  created_before: t.Optional(t.String()),
-  updated_after: t.Optional(t.String()),
-  updated_before: t.Optional(t.String())
+export const recordQuerySchema = z.object({
+  student_id: z.string().regex(positiveIdPattern).optional(),
+  teacher_id: z.string().regex(positiveIdPattern).optional(),
+  status: recordStatusSchema.optional(),
+  practice_after: z.string().optional(),
+  practice_before: z.string().optional(),
+  created_after: z.string().optional(),
+  created_before: z.string().optional(),
+  updated_after: z.string().optional(),
+  updated_before: z.string().optional()
 });
 
-export function apiError(code: number, message: string) {
-  return status(code, { error: message });
+export function apiError(c: Context, code: number, message: string) {
+  return c.json({ error: message }, code as 400);
 }
 
-export function toPublicUser(user: PublicUser | AuthTokenPayload): PublicUser {
+export function validationHook(result: { success: boolean; error?: { issues?: Array<{ message?: string }> } }, c: Context) {
+  if (result.success) {
+    return;
+  }
+
+  return apiError(c, 400, result.error?.issues?.[0]?.message ?? '请求参数无效。');
+}
+
+export function toPublicUser(user: PublicUser) {
   return {
     id: user.id,
     uid: user.uid,
     role: user.role,
-    name: user.name
+    name: user.name,
+    password_setup_required: user.password_setup_required
   };
 }
 
@@ -335,23 +327,25 @@ export function normalizeRecordFilters(query: RecordFilters): RecordFilters {
   };
 }
 
-export function requireAuthenticatedUser(user: PublicUser | null, authError: string | null) {
+export function requireAuthenticatedUser(c: Context<AppBindings>) {
+  const user = c.get('user');
+
   if (!user) {
-    return apiError(401, authError ?? '缺少认证令牌。');
+    return apiError(c, 401, c.get('authError') ?? '缺少认证令牌。');
   }
 
   return undefined;
 }
 
-export function requireRole(user: PublicUser | null, authError: string | null, roles: UserRole[]) {
-  const authFailure = requireAuthenticatedUser(user, authError);
+export function requireRole(c: Context<AppBindings>, roles: UserRole[]) {
+  const authFailure = requireAuthenticatedUser(c);
 
   if (authFailure) {
     return authFailure;
   }
 
-  if (!roles.includes(user!.role)) {
-    return apiError(403, '没有权限访问该资源。');
+  if (!roles.includes(c.get('user')!.role)) {
+    return apiError(c, 403, '没有权限访问该资源。');
   }
 
   return undefined;

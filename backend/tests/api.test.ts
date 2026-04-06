@@ -1,9 +1,9 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const testDbPath = `/tmp/social-practice-test-db-${Date.now()}.json`;
+const testDbPath = `/tmp/social-practice-test-db-${Date.now()}.db`;
 const testUploadDir = fileURLToPath(new URL('../uploads', import.meta.url));
 const cleanupUploadFiles = new Set<string>();
 
@@ -16,6 +16,7 @@ type DatabaseModule = typeof import('../src/database');
 type LoginAttemptsModule = typeof import('../src/auth/login-attempts');
 type CsvImportModule = typeof import('../src/csv/user-import');
 type AppModule = typeof import('../src/app');
+type PasswordModule = typeof import('../src/auth/password');
 
 let database: DatabaseModule['default'];
 let app: AppModule['app'];
@@ -24,13 +25,16 @@ let recordLoginFailure: LoginAttemptsModule['recordLoginFailure'];
 let clearLoginFailures: LoginAttemptsModule['clearLoginFailures'];
 let parseUserImportCsvBuffer: CsvImportModule['parseUserImportCsvBuffer'];
 let parseUserImportCsvText: CsvImportModule['parseUserImportCsvText'];
+let hashPassword: PasswordModule['hashPassword'];
+let isLowCostPasswordHash: PasswordModule['isLowCostPasswordHash'];
 
 beforeAll(async () => {
-  const [databaseModule, loginAttemptsModule, csvImportModule, appModule] = await Promise.all([
+  const [databaseModule, loginAttemptsModule, csvImportModule, appModule, passwordModule] = await Promise.all([
     import('../src/database'),
     import('../src/auth/login-attempts'),
     import('../src/csv/user-import'),
-    import('../src/app')
+    import('../src/app'),
+    import('../src/auth/password')
   ]);
 
   database = databaseModule.default;
@@ -40,6 +44,8 @@ beforeAll(async () => {
   clearLoginFailures = loginAttemptsModule.clearLoginFailures;
   parseUserImportCsvBuffer = csvImportModule.parseUserImportCsvBuffer;
   parseUserImportCsvText = csvImportModule.parseUserImportCsvText;
+  hashPassword = passwordModule.hashPassword;
+  isLowCostPasswordHash = passwordModule.isLowCostPasswordHash;
 });
 
 afterAll(() => {
@@ -57,7 +63,7 @@ afterAll(() => {
 });
 
 async function apiRequest(pathname: string, init?: RequestInit) {
-  return app.handle(new Request(`http://localhost${pathname}`, init));
+  return app.request(pathname, init);
 }
 
 async function jsonRequest(pathname: string, body?: unknown, init: RequestInit = {}) {
@@ -96,6 +102,16 @@ async function loginAs(uid: string, password: string) {
   return payload.token as string;
 }
 
+async function setNormalPassword(uid: string, password: string) {
+  const user = database.findUserByUid(uid);
+
+  if (!user) {
+    throw new Error(`user not found: ${uid}`);
+  }
+
+  database.updateUserPassword(user.id, await hashPassword(password));
+}
+
 describe('database bootstrap and users', () => {
   test('seeds default admin, teacher and student accounts', () => {
     expect(database.findUserByUid('A00001')?.role).toBe('admin');
@@ -106,17 +122,23 @@ describe('database bootstrap and users', () => {
   });
 
   test('creates users and filters by role', async () => {
+    const teacher = database.findUserByUid('T00001');
     const createdStudent = await database.createUser('测试学生', 'student');
     const createdUsers = await database.createUsers([
       { name: '批量教师', role: 'teacher' },
-      { name: '批量管理员', role: 'admin' }
+      { name: '批量管理员', role: 'admin' },
+      { name: '批量学生', role: 'student', teacherId: teacher?.id }
     ]);
 
     expect(createdStudent.uid).toMatch(/^S/);
     expect(createdStudent.password).toHaveLength(8);
+    expect(database.findUserById(createdStudent.id)?.password).toMatch(/^scrypt\$cost=\d+,blockSize=\d+,parallelization=\d+,keyLength=\d+\$[0-9a-f]+\$[0-9a-f]+$/);
+    expect(isLowCostPasswordHash(database.findUserById(createdStudent.id)?.password ?? '')).toBe(true);
     expect(createdUsers[0]?.uid).toMatch(/^T/);
     expect(createdUsers[1]?.uid).toMatch(/^A/);
+    expect(createdUsers[2]?.uid).toMatch(/^S/);
     expect(database.getUsersByRole('teacher').some((user) => user.uid === createdUsers[0]?.uid)).toBe(true);
+    expect(createdUsers[2] ? database.getStudentTeacherId(createdUsers[2].id) : null).toBe(teacher?.id ?? null);
     expect(database.isValidRole('teacher')).toBe(true);
     expect(database.isValidRole('invalid-role')).toBe(false);
   });
@@ -133,6 +155,7 @@ describe('database bootstrap and users', () => {
     const resetResults = await database.resetUserPasswords([createdUser.id]);
     expect(resetResults).toHaveLength(1);
     expect(resetResults[0]?.password).toHaveLength(8);
+    expect(isLowCostPasswordHash(database.findUserById(createdUser.id)?.password ?? '')).toBe(true);
 
     expect(database.deleteUser(createdUser.id)).toBe(true);
     expect(database.findUserById(createdUser.id)).toBeUndefined();
@@ -279,47 +302,109 @@ describe('assignments, records and notifications', () => {
 });
 
 describe('route behavior', () => {
+  test('requires users with low-cost passwords to set a new password after login', async () => {
+    const response = await jsonRequest('/api/auth/login', { uid: 'S00001', password: '12345678' }, { method: 'POST' });
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(payload.user).toMatchObject({
+      uid: 'S00001',
+      password_setup_required: true
+    });
+
+    const token = payload.token as string;
+    const blockedResponse = await apiRequest('/api/students/me/records', {
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    expect(blockedResponse.status).toBe(403);
+    expect((await readJson(blockedResponse)).error).toBe('请设置密码。');
+
+    const changePasswordResponse = await jsonRequest('/api/auth/password', {
+      current_password: '12345678',
+      new_password: 'new-password-01'
+    }, {
+      method: 'PUT',
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    expect(changePasswordResponse.status).toBe(200);
+
+    const reloginResponse = await jsonRequest('/api/auth/login', { uid: 'S00001', password: 'new-password-01' }, { method: 'POST' });
+    const reloginPayload = await readJson(reloginResponse);
+
+    expect(reloginResponse.status).toBe(200);
+    expect(reloginPayload.user).toMatchObject({
+      uid: 'S00001',
+      password_setup_required: false
+    });
+  });
+
+  test('rejects passwords longer than 32 characters in the backend', async () => {
+    await setNormalPassword('T00001', 'teacher-pass-01');
+    const token = await loginAs('T00001', 'teacher-pass-01');
+    const response = await jsonRequest('/api/auth/password', {
+      current_password: 'teacher-pass-01',
+      new_password: '123456789012345678901234567890123'
+    }, {
+      method: 'PUT',
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    expect(response.status).toBe(400);
+    expect((await readJson(response)).error).toBe('密码不能超过 32 位。');
+  });
+
   test('rejects non-image content during upload even if the declared type is allowed', async () => {
-    const token = await loginAs('S00001', '12345678');
+    await setNormalPassword('S00001', 'student-pass-01');
+    const token = await loginAs('S00001', 'student-pass-01');
     const formData = new FormData();
     formData.set('image', new File(['not really an image'], 'fake.png', { type: 'image/png' }));
 
-    const response = await formRequest('/api/upload', formData, {
+    const response = await formRequest('/api/uploads', formData, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`
       }
     });
 
-    expect(response.status).toBe(422);
-    expect((await readJson(response)).message).toBe('"body.image" has invalid file type');
+    expect(response.status).toBe(400);
+    expect((await readJson(response)).error).toBe('仅支持上传 JPG、PNG、GIF 格式的图片。');
   });
 
   test('rejects oversized images during upload', async () => {
-    const token = await loginAs('S00001', '12345678');
+    await setNormalPassword('S00001', 'student-pass-01');
+    const token = await loginAs('S00001', 'student-pass-01');
     const oversizedImage = new Uint8Array(5 * 1024 * 1024 + 1);
     oversizedImage.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const formData = new FormData();
     formData.set('image', new File([oversizedImage], 'large.png', { type: 'image/png' }));
 
-    const response = await formRequest('/api/upload', formData, {
+    const response = await formRequest('/api/uploads', formData, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`
       }
     });
 
-    expect(response.status).toBe(422);
-    expect((await readJson(response)).message).toBe("Expected kind 'File'");
+    expect(response.status).toBe(400);
+    expect((await readJson(response)).error).toBe('图片大小不能超过 5 MiB。');
   });
 
   test('rejects future practice dates', async () => {
-    const token = await loginAs('S00001', '12345678');
+    await setNormalPassword('S00001', 'student-pass-01');
+    const token = await loginAs('S00001', 'student-pass-01');
     const tomorrowDate = new Date();
     tomorrowDate.setDate(tomorrowDate.getDate() + 1);
     const tomorrow = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getDate()).padStart(2, '0')}`;
 
-    const response = await jsonRequest('/api/student/records', {
+    const response = await jsonRequest('/api/students/me/records', {
       title: '未来记录',
       content: '不应该允许',
       practice_date: tomorrow,
@@ -338,6 +423,7 @@ describe('route behavior', () => {
   });
 
   test('resubmits rejected record as pending after student edit', async () => {
+    await setNormalPassword('S00001', 'student-pass-01');
     const student = database.findUserByUid('S00001')!;
     const record = database.createRecord({
       student_id: student.id,
@@ -355,8 +441,8 @@ describe('route behavior', () => {
       updated_by_uid: 'T00001'
     });
 
-    const token = await loginAs(student.uid, '12345678');
-    const response = await jsonRequest(`/api/student/records/${record.id}`, {
+    const token = await loginAs(student.uid, 'student-pass-01');
+    const response = await jsonRequest(`/api/students/me/records/${record.id}`, {
       title: '已修改记录',
       content: '补充后的内容',
       practice_date: '2026-01-13',
@@ -376,7 +462,8 @@ describe('route behavior', () => {
   });
 
   test('prevents admins from deleting themselves', async () => {
-    const token = await loginAs('A00001', '12345678');
+    await setNormalPassword('A00001', 'admin-pass-01');
+    const token = await loginAs('A00001', 'admin-pass-01');
 
     const response = await jsonRequest('/api/admin/users/1', undefined, {
       method: 'DELETE',

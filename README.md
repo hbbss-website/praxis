@@ -2,54 +2,42 @@
 
 ## 技术栈
 
-- 使用 Bun 进行依赖管理、脚本执行和后端运行
-- 使用 TypeScript 编写后端代码、前端页面逻辑和测试
-- 前端使用 React、Vite 与 shadcn/ui
-- 后端使用 ElysiaJS 提供 API 服务，并通过 Eden 与前端共享接口类型
-- 使用 `backend/database.json` 作为 JSON 文件数据存储
+- 使用 `pnpm` 进行依赖管理
+- 前端使用 `React + Vite + shadcn/ui`
+- 后端使用 `Node.js + Hono`
+- 数据库使用 `SQLite + better-sqlite3`
+- ORM 使用 `Drizzle ORM`
+
+默认数据库文件为 `backend/data/app.db`，上传文件目录为 `backend/uploads`。
+
+## 安装与初始化
+
+```bash
+pnpm install
+pnpm db:migrate
+```
 
 ## 如何使用
 
 安装依赖：
 
 ```bash
-bun install
+pnpm install --frozen-lockfile
 ```
 
 启动：
 
 ```bash
-bun start
+pnpm start
 ```
 
-以开发模式启动：
+更多命令见 `package.json`。
+
+## 环境变量
 
 ```bash
-bun dev
-```
-
-开发模式下前端由 Vite 提供服务，默认地址为 `http://localhost:5173`，并通过代理转发 `/api` 与 `/uploads` 到后端；修改前端代码后会自动热更新。
-
-编译前端 ts 文件：
-
-```bash
-bun build:frontend
-```
-
-运行类型检查和测试：
-
-```bash
-bun test:all
-```
-
-生产模式默认运行在 `http://localhost:3000`。
-
-## 安全配置
-
-部署前请配置以下环境变量：
-
-```bash
-JWT_SECRET=请替换为至少32位的高强度随机密钥
+DATABASE_FILE=./backend/data/app.db
+JWT_SECRET=请替换为至少 32 位的高强度随机密钥
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 JWT_EXPIRES_IN=8h
 LOGIN_MAX_ATTEMPTS=5

@@ -17,20 +17,23 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "resolveJsonModule": true,
     "types": [
-      "bun"
+      "node",
+      "vite/client"
     ],
-    "isolatedModules": true
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true
   },
   "include": [
     "backend/src/**/*.ts",
     "backend/src/**/*.d.ts",
+    "backend/scripts/**/*.ts",
     "backend/tests/**/*.ts",
+    "drizzle.config.ts",
     "frontend/src/**/*.ts",
     "frontend/src/**/*.tsx",
     "frontend/vite.config.ts",

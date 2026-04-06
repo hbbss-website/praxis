@@ -1,19 +1,15 @@
-import { Elysia, t } from 'elysia';
+import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-import { apiError } from '../http';
-import { authPlugin } from '../plugins/auth';
+import { apiError, requireAuthenticatedUser } from '../http';
+import { authMiddleware, type AppBindings } from '../plugins/auth';
 
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const uploadDir = path.join(currentDir, '..', '..', 'uploads');
+const uploadDir = path.resolve(process.cwd(), 'backend/uploads');
 const maxUploadImageSize = 5 * 1024 * 1024;
 
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+fs.mkdirSync(uploadDir, { recursive: true });
 
 const uploadExtensionByType: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -55,38 +51,43 @@ function detectImageType(bytes: Uint8Array) {
   return null;
 }
 
-export const uploadRoutes = new Elysia()
-  .use(authPlugin)
-  .post('/upload', async ({ body, user, authError }) => {
-    if (!user) {
-      return apiError(401, authError ?? '缺少认证令牌。');
+export const uploadRoutes = new Hono<AppBindings>()
+  .use('/uploads', authMiddleware)
+  .post('/uploads', async (c) => {
+    const authFailure = requireAuthenticatedUser(c);
+
+    if (authFailure) {
+      return authFailure;
     }
 
-    if (body.image.size > maxUploadImageSize) {
-      return apiError(400, '图片大小不能超过 5 MiB。');
+    const formData = await c.req.raw.formData();
+    const image = formData.get('image');
+
+    if (!(image instanceof File)) {
+      return apiError(c, 400, '缺少图片文件。');
     }
 
-    const imageHeader = new Uint8Array(await body.image.slice(0, 8).arrayBuffer());
+    if (image.size > maxUploadImageSize) {
+      return apiError(c, 400, '图片大小不能超过 5 MiB。');
+    }
+
+    const imageHeader = new Uint8Array(await image.slice(0, 8).arrayBuffer());
     const imageType = detectImageType(imageHeader);
 
     if (!imageType) {
-      return apiError(400, '仅支持上传 JPG、PNG、GIF 格式的图片。');
+      return apiError(c, 400, '仅支持上传 JPG、PNG、GIF 格式的图片。');
     }
 
     const extension = uploadExtensionByType[imageType];
     const filename = `${randomUUID()}${extension}`;
-    await Bun.write(path.join(uploadDir, filename), body.image);
+    const filePath = path.join(uploadDir, filename);
+    const buffer = Buffer.from(await image.arrayBuffer());
 
-    return {
+    await fs.promises.writeFile(filePath, buffer);
+
+    return c.json({
       message: '上传成功。',
       filename,
       imageUrl: `/uploads/${filename}`
-    };
-  }, {
-    body: t.Object({
-      image: t.File({
-        type: ['image/jpeg', 'image/png', 'image/gif'],
-        maxSize: '5m'
-      })
-    })
+    });
   });

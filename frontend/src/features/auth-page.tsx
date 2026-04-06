@@ -1,6 +1,7 @@
 import { FileCheck2, LockKeyhole, ShieldCheck, UserRound, Zap } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -87,8 +88,13 @@ export function LoginPage() {
 
                 try {
                   const data = await login(uid.trim(), password);
-                  signIn(data.token, data.user);
-                  navigate(getDefaultPathByRole(data.user.role), { replace: true });
+                  signIn(data.token, data.user, data.user.password_setup_required ? password : null);
+
+                  if (data.user.password_setup_required) {
+                    toast('请先设置密码。');
+                  }
+
+                  navigate(getDefaultPathByRole(data.user.role, data.user.password_setup_required), { replace: true });
                 } catch (nextError) {
                   toastError(nextError, '登录失败。');
                 } finally {
