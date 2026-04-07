@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest --ui",
-    "check": "pnpm typecheck && pnpm test",
+    "test:all": "pnpm typecheck && pnpm test",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:migrate": "tsx backend/scripts/migrate.ts",
