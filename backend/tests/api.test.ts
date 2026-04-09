@@ -11,6 +11,7 @@ process.env.DATABASE_FILE = testDbPath;
 process.env.JWT_SECRET = 'test-jwt-secret-12345678901234567890';
 process.env.LOGIN_MAX_ATTEMPTS = '3';
 process.env.LOGIN_LOCKOUT_MS = '60000';
+process.env.TRUST_PROXY = 'true';
 
 type DatabaseModule = typeof import('../src/database');
 type LoginAttemptsModule = typeof import('../src/auth/login-attempts');
@@ -397,6 +398,77 @@ describe('route behavior', () => {
     expect((await readJson(response)).error).toBe('图片大小不能超过 5 MiB。');
   });
 
+  test('restricts uploaded images to permitted users', async () => {
+    await setNormalPassword('S00001', 'student-pass-01');
+    await setNormalPassword('S00002', 'student-pass-02');
+    await setNormalPassword('T00001', 'teacher-pass-01');
+    await setNormalPassword('A00001', 'admin-pass-01');
+
+    const student = database.findUserByUid('S00001')!;
+    const teacher = database.findUserByUid('T00001')!;
+    database.assignStudentsToTeacher(teacher.id, [student.id]);
+
+    const studentToken = await loginAs('S00001', 'student-pass-01');
+    const otherStudentToken = await loginAs('S00002', 'student-pass-02');
+    const teacherToken = await loginAs('T00001', 'teacher-pass-01');
+    const adminToken = await loginAs('A00001', 'admin-pass-01');
+
+    const imageBytes = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      0x00, 0x00, 0x00, 0x00
+    ]);
+    const formData = new FormData();
+    formData.set('image', new File([imageBytes], 'record.png', { type: 'image/png' }));
+
+    const uploadResponse = await formRequest('/api/uploads', formData, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${studentToken}`
+      }
+    });
+    const uploadPayload = await readJson(uploadResponse);
+    const imageUrl = uploadPayload.imageUrl as string;
+
+    expect(uploadResponse.status).toBe(200);
+
+    database.createRecord({
+      student_id: student.id,
+      title: '图片访问测试',
+      content: '用于验证图片权限。',
+      practice_date: '2026-01-14',
+      location: '教室',
+      duration: 1,
+      image_path: imageUrl
+    });
+
+    const ownerResponse = await apiRequest(imageUrl, {
+      headers: {
+        authorization: `Bearer ${studentToken}`
+      }
+    });
+    const otherStudentResponse = await apiRequest(imageUrl, {
+      headers: {
+        authorization: `Bearer ${otherStudentToken}`
+      }
+    });
+    const teacherResponse = await apiRequest(imageUrl, {
+      headers: {
+        authorization: `Bearer ${teacherToken}`
+      }
+    });
+    const adminResponse = await apiRequest(imageUrl, {
+      headers: {
+        authorization: `Bearer ${adminToken}`
+      }
+    });
+
+    expect(ownerResponse.status).toBe(200);
+    expect(ownerResponse.headers.get('content-type')).toBe('image/png');
+    expect(otherStudentResponse.status).toBe(404);
+    expect(teacherResponse.status).toBe(200);
+    expect(adminResponse.status).toBe(200);
+  });
+
   test('rejects future practice dates', async () => {
     await setNormalPassword('S00001', 'student-pass-01');
     const token = await loginAs('S00001', 'student-pass-01');
@@ -473,6 +545,54 @@ describe('route behavior', () => {
 
     expect(response.status).toBe(400);
     expect((await readJson(response)).error).toBe('不能删除自己的账号。');
+  });
+
+  test('rejects oversized csv imports in the backend', async () => {
+    await setNormalPassword('A00001', 'admin-pass-01');
+    const token = await loginAs('A00001', 'admin-pass-01');
+    const oversizedCsv = new Uint8Array(50 * 1024 * 1024 + 1);
+    oversizedCsv.set(new TextEncoder().encode('张三,student,T00001\n'));
+    const formData = new FormData();
+    formData.set('file', new File([oversizedCsv], 'users.csv', { type: 'text/csv' }));
+
+    const response = await formRequest('/api/admin/users/import/preview', formData, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    expect(response.status).toBe(400);
+    expect((await readJson(response)).error).toBe('CSV 文件大小不能超过 50 MiB。');
+  });
+
+  test('locks failed logins per uid and source without blocking other accounts from the same address', async () => {
+    await setNormalPassword('S00001', 'student-pass-01');
+    await setNormalPassword('S00002', 'student-pass-02');
+    const headers = { 'x-real-ip': '203.0.113.10' };
+
+    for (let index = 0; index < 3; index += 1) {
+      const response = await jsonRequest('/api/auth/login', { uid: 'S00001', password: 'wrong-password' }, {
+        method: 'POST',
+        headers
+      });
+
+      expect(response.status).toBe(401);
+    }
+
+    const lockedResponse = await jsonRequest('/api/auth/login', { uid: 'S00001', password: 'student-pass-01' }, {
+      method: 'POST',
+      headers
+    });
+
+    expect(lockedResponse.status).toBe(429);
+
+    const otherUserResponse = await jsonRequest('/api/auth/login', { uid: 'S00002', password: 'student-pass-02' }, {
+      method: 'POST',
+      headers
+    });
+
+    expect(otherUserResponse.status).toBe(200);
   });
 });
 

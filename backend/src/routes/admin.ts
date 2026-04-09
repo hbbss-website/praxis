@@ -32,6 +32,7 @@ const batchCreateUsersBodySchema = z.object({
 const teacherStudentsBodySchema = z.object({
   student_ids: z.array(z.number().int().positive()).min(1)
 });
+const maxImportCsvSize = 50 * 1024 * 1024;
 
 const teacherIdParamSchema = z.object({
   teacherId: z.string().regex(/^[1-9]\d*$/)
@@ -64,6 +65,10 @@ function buildTeacherIdMap(teacherUids: string[]) {
 async function readImportFile(file: File) {
   if (!file.name.toLowerCase().endsWith('.csv')) {
     throw new Error('请上传 .csv 文件。');
+  }
+
+  if (file.size > maxImportCsvSize) {
+    throw new Error('CSV 文件大小不能超过 50 MiB。');
   }
 
   return parseUserImportCsvBuffer(new Uint8Array(await file.arrayBuffer()), { columnCount: 3 });

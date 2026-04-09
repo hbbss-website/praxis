@@ -490,6 +490,40 @@ class SQLiteDatabase {
     return row ? toPracticeRecord(row) : null;
   }
 
+  canAccessUpload(imagePath: string, userId: number, role: UserRole) {
+    if (role === 'admin') {
+      return Boolean(
+        db
+          .select({ id: practiceRecords.id })
+          .from(practiceRecords)
+          .where(eq(practiceRecords.imagePath, imagePath))
+          .limit(1)
+          .get()
+      );
+    }
+
+    if (role === 'student') {
+      return Boolean(
+        db
+          .select({ id: practiceRecords.id })
+          .from(practiceRecords)
+          .where(and(eq(practiceRecords.imagePath, imagePath), eq(practiceRecords.studentId, userId)))
+          .limit(1)
+          .get()
+      );
+    }
+
+    return Boolean(
+      db
+        .select({ id: practiceRecords.id })
+        .from(practiceRecords)
+        .innerJoin(teacherStudents, eq(practiceRecords.studentId, teacherStudents.studentId))
+        .where(and(eq(practiceRecords.imagePath, imagePath), eq(teacherStudents.teacherId, userId)))
+        .limit(1)
+        .get()
+    );
+  }
+
   getRecordsByStudent(studentId: number): StudentRecord[] {
     return db
       .select({

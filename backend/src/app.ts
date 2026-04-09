@@ -3,8 +3,9 @@ import { cors } from 'hono/cors';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { apiError } from './http';
-import type { AppBindings } from './plugins/auth';
+import database from './database';
+import { apiError, requireAuthenticatedUser } from './http';
+import { authMiddleware, type AppBindings } from './plugins/auth';
 import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { studentRoutes } from './routes/students';
@@ -82,16 +83,30 @@ export const api = new Hono<AppBindings>()
   .route('/', uploadRoutes)
   .notFound((c) => apiError(c, 404, '资源不存在。'))
   .onError((error, c) => {
-    console.error(error);
-    return apiError(c, 500, error instanceof Error && error.message ? error.message : '服务器内部错误。');
+    console.log(error);
+    return apiError(c, 500, '服务器内部错误。');
   });
 
 export type Api = typeof api;
 
 export const app = new Hono<AppBindings>()
   .route('/api', api)
+  .use('/uploads/*', authMiddleware)
   .get('/health', (c) => c.json({ ok: true }))
   .get('/uploads/*', (c) => {
+    const authFailure = requireAuthenticatedUser(c);
+
+    if (authFailure) {
+      return authFailure;
+    }
+
+    const user = c.get('user')!;
+    const imagePath = c.req.path;
+
+    if (!database.canAccessUpload(imagePath, user.id, user.role)) {
+      return apiError(c, 404, '资源不存在。');
+    }
+
     const filePath = resolveSafeFile(uploadDir, c.req.path.replace(/^\/uploads\//, ''));
 
     if (!filePath) {

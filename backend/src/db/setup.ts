@@ -54,6 +54,7 @@ export function ensureDatabaseSchema() {
   `);
 
   db.run(sql`create index if not exists practice_records_student_idx on practice_records(student_id)`);
+  db.run(sql`create index if not exists practice_records_image_path_idx on practice_records(image_path)`);
   db.run(sql`create index if not exists practice_records_status_idx on practice_records(status)`);
   db.run(sql`create index if not exists practice_records_practice_date_idx on practice_records(practice_date)`);
   db.run(sql`create index if not exists practice_records_created_at_idx on practice_records(created_at)`);

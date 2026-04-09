@@ -5,6 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useSession } from '@/lib/auth';
 import { DatePickerField } from '@/shared/date-picker-field';
 import { EmptyState } from '@/shared/empty-state';
+import { AuthenticatedImage } from '@/shared/authenticated-image';
 import { StatCard } from '@/shared/stat-card';
 import { ConfirmActionDialog } from '@/components/confirm-action-dialog';
 import { DataTable } from '@/components/data-table';
@@ -18,7 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import { ApiResponseError, createApiClient, getApiOrigin, unwrapResponse } from '@/lib/api';
+import { ApiResponseError, createApiClient, unwrapResponse } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/feedback';
 import { formatDate, formatDateTime, formatDuration, normalizeDateInputValue, statusLabel } from '@/lib/format';
 import { useShiftMultiSelect } from '@/lib/shift-selection';
@@ -926,7 +927,12 @@ function RecordPreview({ record }: { record: TeacherRecord }) {
         {record.content}
       </div>
       {record.image_path ? (
-        <img className="max-h-72 w-full rounded-2xl object-cover" src={`${getApiOrigin()}${record.image_path}`} alt={record.title} />
+        <AuthenticatedImage
+          className="max-h-72 w-full rounded-2xl object-cover"
+          placeholderClassName="flex min-h-52 w-full items-center justify-center rounded-2xl bg-muted/40"
+          src={record.image_path}
+          alt={record.title}
+        />
       ) : null}
     </div>
   );

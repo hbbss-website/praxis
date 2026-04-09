@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useSession } from '@/lib/auth';
 import { ConfirmActionDialog } from '@/components/confirm-action-dialog';
+import { AuthenticatedImage } from '@/shared/authenticated-image';
 import { DatePickerField } from '@/shared/date-picker-field';
 import { EmptyState } from '@/shared/empty-state';
 import { StatCard } from '@/shared/stat-card';
@@ -15,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import { ApiResponseError, createApiClient, getApiOrigin, unwrapResponse, uploadImage, validateUploadImageFile } from '@/lib/api';
+import { ApiResponseError, createApiClient, unwrapResponse, uploadImage, validateUploadImageFile } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/feedback';
 import { formatDate, formatDateTime, formatDuration, normalizeDateInputValue, notificationLabel, statusLabel } from '@/lib/format';
 import type { AppNotification, RecordStatistics, StudentRecord } from '@/lib/types';
@@ -115,7 +116,12 @@ export function StudentDashboardPage() {
                 <div className="grid min-h-full md:grid-cols-[180px_minmax(0,1fr)]">
                   <div className="relative min-h-40 overflow-hidden bg-muted">
                     {record.image_path ? (
-                      <img className="h-full w-full object-cover" src={`${getApiOrigin()}${record.image_path}`} alt={record.title} />
+                      <AuthenticatedImage
+                        className="h-full w-full object-cover"
+                        placeholderClassName="flex h-full w-full items-center justify-center bg-muted/40"
+                        src={record.image_path}
+                        alt={record.title}
+                      />
                     ) : (
                       <div className="flex h-full items-center justify-center text-white/85">
                         <ImagePlus className="size-12" />
@@ -183,7 +189,12 @@ export function StudentDashboardPage() {
               </DialogHeader>
               <div className="space-y-4">
                 {selectedRecord.image_path ? (
-                  <img className="max-h-80 w-full rounded-2xl object-cover" src={`${getApiOrigin()}${selectedRecord.image_path}`} alt={selectedRecord.title} />
+                  <AuthenticatedImage
+                    className="max-h-80 w-full rounded-2xl object-cover"
+                    placeholderClassName="flex min-h-52 w-full items-center justify-center rounded-2xl bg-muted/40"
+                    src={selectedRecord.image_path}
+                    alt={selectedRecord.title}
+                  />
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   <StatusBadge status={selectedRecord.status} />
@@ -276,7 +287,7 @@ export function StudentUploadPage() {
           duration: String(record.duration)
         });
         setOriginalImagePath(record.image_path);
-        setImagePreview(record.image_path ? `${getApiOrigin()}${record.image_path}` : '');
+        setImagePreview('');
       })
       .catch((nextError) => {
         if (nextError instanceof ApiResponseError && nextError.status === 401) {
@@ -383,7 +394,14 @@ export function StudentUploadPage() {
                 <Field label="实践图片">
                   <label className="group flex min-h-72 cursor-pointer flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-muted/20 p-5 text-center transition hover:border-primary hover:bg-background">
                     {previewUrl ? (
-                      <img className="max-h-72 w-full rounded-2xl object-cover" src={previewUrl} alt="预览" />
+                      <AuthenticatedImage className="max-h-72 w-full rounded-2xl object-cover" src={previewUrl} alt="预览" />
+                    ) : originalImagePath ? (
+                      <AuthenticatedImage
+                        className="max-h-72 w-full rounded-2xl object-cover"
+                        placeholderClassName="flex min-h-72 w-full items-center justify-center rounded-xl bg-muted/40"
+                        src={originalImagePath}
+                        alt="预览"
+                      />
                     ) : (
                       <>
                         <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -403,7 +421,7 @@ export function StudentUploadPage() {
                         const file = event.target.files?.[0] ?? null;
                         if (!file) {
                           setSelectedImage(null);
-                          setImagePreview(originalImagePath ? `${getApiOrigin()}${originalImagePath}` : '');
+                          setImagePreview('');
                           return;
                         }
 
@@ -412,7 +430,7 @@ export function StudentUploadPage() {
                         } catch (nextError) {
                           setSelectedImage(null);
                           event.target.value = '';
-                          setImagePreview(originalImagePath ? `${getApiOrigin()}${originalImagePath}` : '');
+                          setImagePreview('');
                           toastError(nextError);
                           return;
                         }
