@@ -54,115 +54,109 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-5">
-      <div className="mx-auto max-w-[1480px] space-y-4 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-4 lg:space-y-0">
-        <div className="space-y-4 lg:hidden">
-          <Card className="border-border/70 bg-card/95 py-0 shadow-sm">
-            <div className="flex items-start justify-between gap-4 p-4">
-              <Link to="/" className="flex min-w-0 items-center gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <ClipboardList className="size-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm text-muted-foreground">社会实践系统</p>
-                  <p className="truncate text-base font-semibold">{roleTitle}</p>
-                </div>
-              </Link>
-              <Button variant="ghost" size="sm" className="shrink-0" onClick={handleSignOut}>
-                <LogOut className="size-4" />
-                退出
-              </Button>
-            </div>
-            <div className="border-t border-border/70 px-4 py-3">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-                <span className="font-semibold">{user.name}</span>
-                <span className="text-muted-foreground">{user.uid}</span>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="border-border/70 bg-card/95 py-0 shadow-sm">
-            <nav className="flex gap-2 overflow-x-auto p-2">
-              {items.map(({ to, label }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  className={({ isActive }) =>
-                    cn(
-                      'inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition',
-                      isActive
-                        ? 'bg-primary text-primary-foreground'
-                        : 'border border-border/70 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
-                    )
-                  }
-                >
-                  {label}
-                  {user.role === 'student' && to === '/student/notifications' ? (
-                    <NotificationBadgeInline count={notificationCount} />
-                  ) : null}
-                </NavLink>
-              ))}
-            </nav>
-          </Card>
-        </div>
-
-        <Card className="hidden h-fit self-start border-border/70 bg-card/95 py-0 shadow-sm lg:sticky lg:top-5 lg:block lg:max-h-[calc(100vh-2.5rem)]">
-          <aside className="flex h-full flex-col gap-5 overflow-y-auto p-4">
-            <Link to="/" className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+    <div className="min-h-screen bg-background lg:flex">
+      <div className="space-y-4 px-3 py-3 sm:px-4 sm:py-4 lg:hidden">
+        <Card className="border-border/70 bg-card/95 py-0 shadow-sm">
+          <div className="flex items-start justify-between gap-4 p-4">
+            <Link to="/" className="flex min-w-0 items-center gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <ClipboardList className="size-5" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">社会实践系统</p>
-                <p className="text-base font-semibold">{roleTitle}</p>
+                <p className="truncate text-base font-semibold">{roleTitle}</p>
               </div>
             </Link>
-
-            <div className="rounded-lg border border-border/70 bg-muted/40 p-3">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">当前账户</p>
-              <div className="mt-2">
-                <p className="text-sm font-semibold">{user.name}</p>
-                <p className="text-xs text-muted-foreground">{user.uid}</p>
-              </div>
+            <Button variant="ghost" size="sm" className="shrink-0" onClick={handleSignOut}>
+              <LogOut className="size-4" />
+              退出
+            </Button>
+          </div>
+          <div className="border-t border-border/70 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+              <span className="font-semibold">{user.name}</span>
+              <span className="text-muted-foreground">{user.uid}</span>
             </div>
+          </div>
+        </Card>
 
-            <nav className="flex flex-col gap-2">
-              {items.map(({ to, label }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition',
-                      isActive
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    )
-                  }
-                >
-                  {label}
-                  {user.role === 'student' && to === '/student/notifications' ? (
-                    <NotificationBadgeInline count={notificationCount} />
-                  ) : null}
-                </NavLink>
-              ))}
-            </nav>
+        <Card className="border-border/70 bg-card/95 py-0 shadow-sm">
+          <nav className="flex gap-2 overflow-x-auto p-2">
+            {items.map(({ to, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  cn(
+                    'inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition',
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'border border-border/70 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )
+                }
+              >
+                {label}
+                {user.role === 'student' && to === '/student/notifications' ? (
+                  <NotificationBadgeInline count={notificationCount} />
+                ) : null}
+              </NavLink>
+            ))}
+          </nav>
+        </Card>
+      </div>
 
-            <Button
-              variant="ghost"
-              className="mt-auto justify-start"
-              onClick={handleSignOut}
-            >
+      <aside className="hidden h-screen w-64 shrink-0 flex-col border-r border-border/80 bg-card lg:sticky lg:top-0 lg:flex">
+        <div className="flex h-full flex-col overflow-y-auto">
+          <Link to="/" className="flex min-h-20 items-center gap-3 px-5">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <ClipboardList className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm text-muted-foreground">社会实践系统</p>
+              <p className="truncate text-base font-semibold tracking-tight">{roleTitle}</p>
+            </div>
+          </Link>
+
+          <nav className="flex flex-1 flex-col gap-1 px-3 py-3">
+            {items.map(({ to, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  cn(
+                    'group flex min-h-10 items-center justify-between rounded-full px-4 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-muted text-foreground shadow-[inset_0_0_0_1px_rgb(0_0_0/0.02)]'
+                      : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+                  )
+                }
+              >
+                <span className="truncate">{label}</span>
+                {user.role === 'student' && to === '/student/notifications' ? (
+                  <NotificationBadgeInline count={notificationCount} />
+                ) : null}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="border-t border-border/80 px-4 py-4">
+            <div className="min-w-0 px-1 pb-3">
+              <p className="truncate text-sm font-medium">{user.name}</p>
+              <p className="truncate text-xs text-muted-foreground">{user.uid}</p>
+            </div>
+            <Button variant="ghost" className="w-full justify-start rounded-full px-3" onClick={handleSignOut}>
               <LogOut className="size-4" />
               退出登录
             </Button>
-          </aside>
-        </Card>
+          </div>
+        </div>
+      </aside>
 
-        <main className="min-w-0">
+      <main className="min-w-0 flex-1 px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-5 lg:px-8 lg:py-6">
+        <div className="mx-auto max-w-[1220px]">
           <Outlet />
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
