@@ -1104,7 +1104,7 @@ class SQLiteDatabase {
     db.insert(users).values([
       {
         uid: 'A00001',
-        password: hashPasswordSync(INITIAL_USER_PASSWORD),
+        password: hashPasswordSync(INITIAL_USER_PASSWORD, 'low'),
         role: 'admin',
         name: '超级奶龙',
         nameInitials: getPinyinInitials('超级奶龙'),
@@ -1113,7 +1113,7 @@ class SQLiteDatabase {
       }
     ]).run();
 
-    console.log("欢迎使用可爱奶龙社会实践系统，初始 uid：A00001，初始密码：", INITIAL_USER_PASSWORD);
+    console.log("欢迎使用可爱奶龙社会实践系统，初始 uid：A00001，初始密码：%s", INITIAL_USER_PASSWORD);
   }
 
   private allocateUids(roles: UserRole[]) {
