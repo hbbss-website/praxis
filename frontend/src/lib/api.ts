@@ -1,7 +1,7 @@
 import { hc } from 'hono/client';
 
 import type { Api } from '../../../backend/src/app';
-import { API_URL, MAX_RECORD_IMAGES, type CreatedUser, type CsvImportPreview, type StoredUser, type UploadResult, type UserRole } from './types';
+import { API_URL, MAX_RECORD_IMAGES, type AppRuntimeConfig, type CreatedUser, type CsvImportPreview, type StoredUser, type UploadResult, type UserRole } from './types';
 
 export class ApiResponseError extends Error {
   status: number;
@@ -14,7 +14,7 @@ export class ApiResponseError extends Error {
 
 type ApiResult = Promise<{ data: unknown; error: unknown; status: number }>;
 
-const uploadImageMaxSize = 5 * 1024 * 1024;
+const fallbackUploadImageMaxSize = 5 * 1024 * 1024;
 const uploadImageTypes = new Set(['image/jpeg', 'image/png', 'image/gif']);
 const uploadImageNamePattern = /\.(jpe?g|png|gif)$/i;
 
@@ -210,6 +210,9 @@ export function createApiClient(token?: string | null) {
   });
 
   return {
+    config: {
+      get: () => wrapRpcResponse(client.config.$get())
+    },
     auth: {
       login: {
         post: (body?: any) => wrapRpcResponse(client.auth.login.$post({ json: body }))
@@ -387,9 +390,26 @@ export async function login(uid: string, password: string): Promise<{ token: str
   return unwrapResponse(api.auth.login.post({ uid, password }));
 }
 
-export function validateUploadImageFile(file: File) {
-  if (file.size > uploadImageMaxSize) {
-    throw new Error('图片大小不能超过 5 MiB。');
+export function formatUploadImageMaxSize(bytes: number) {
+  if (bytes % (1024 * 1024) === 0) {
+    return `${bytes / (1024 * 1024)} MiB`;
+  }
+
+  if (bytes % 1024 === 0) {
+    return `${bytes / 1024} KiB`;
+  }
+
+  return `${bytes} B`;
+}
+
+export async function getRuntimeConfig(): Promise<AppRuntimeConfig> {
+  const api = createApiClient();
+  return unwrapResponse(api.config.get());
+}
+
+export function validateUploadImageFile(file: File, maxSizeBytes = fallbackUploadImageMaxSize) {
+  if (file.size > maxSizeBytes) {
+    throw new Error(`图片大小不能超过 ${formatUploadImageMaxSize(maxSizeBytes)}。`);
   }
 
   if (uploadImageTypes.has(file.type) || (!file.type && uploadImageNamePattern.test(file.name))) {
@@ -399,18 +419,18 @@ export function validateUploadImageFile(file: File) {
   throw new Error('仅支持上传 JPG、PNG、GIF 格式的图片。');
 }
 
-export function validateUploadImageFiles(files: File[]) {
+export function validateUploadImageFiles(files: File[], maxSizeBytes = fallbackUploadImageMaxSize) {
   if (files.length > MAX_RECORD_IMAGES) {
     throw new Error(`每条记录最多上传 ${MAX_RECORD_IMAGES} 张图片。`);
   }
 
   for (const file of files) {
-    validateUploadImageFile(file);
+    validateUploadImageFile(file, maxSizeBytes);
   }
 }
 
-export async function uploadImage(file: File, token: string): Promise<UploadResult> {
-  validateUploadImageFile(file);
+export async function uploadImage(file: File, token: string, maxSizeBytes = fallbackUploadImageMaxSize): Promise<UploadResult> {
+  validateUploadImageFile(file, maxSizeBytes);
   const api = createApiClient(token);
   return unwrapResponse(api.upload.post({ image: file }));
 }

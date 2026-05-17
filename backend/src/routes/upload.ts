@@ -7,17 +7,27 @@ import { Readable } from 'node:stream';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import sharp from 'sharp';
 
+import { appConfig } from '../config';
 import { apiError, requireAuthenticatedUser } from '../http';
 import { authMiddleware, type AppBindings } from '../plugins/auth';
 
 const uploadDir = path.resolve(process.cwd(), 'backend/uploads');
-const maxUploadImageSize = 5 * 1024 * 1024;
 
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const webpQuality = 76;
 const maxImageDimension = 1920;
 const headerProbeSize = 8;
+
+function formatBytes(bytes: number): string {
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  let i = 0;
+  while (bytes >= 1024 && i < units.length - 1) {
+    bytes /= 1024;
+    i++;
+  }
+  return `${parseFloat(bytes.toFixed(2))} ${units[i]}`;
+}
 
 type UploadedImageFile = {
   filePath: string;
@@ -83,7 +93,7 @@ function parseImageUpload(request: Request): Promise<UploadedImageFile> {
       limits: {
         files: 1,
         fields: 0,
-        fileSize: maxUploadImageSize + 1
+        fileSize: appConfig.upload_image_max_size_bytes + 1
       }
     });
     const tempFilePath = path.join(uploadDir, `${randomUUID()}.upload`);
@@ -143,7 +153,7 @@ function parseImageUpload(request: Request): Promise<UploadedImageFile> {
       });
 
       file.on('limit', () => {
-        fail(new Error('图片大小不能超过 5 MiB。'));
+        fail(new Error(`图片大小不能超过 ${formatBytes(appConfig.upload_image_max_size_bytes)}。`));
       });
 
       file.on('error', (error) => fail(error));

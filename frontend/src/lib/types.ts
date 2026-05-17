@@ -50,6 +50,10 @@ export type {
 export type CreatedUser = CreateUserResult;
 export type StoredUser = PublicUser;
 
+export interface AppRuntimeConfig {
+  upload_image_max_size_bytes: number;
+}
+
 export interface ApiError {
   error?: string;
 }

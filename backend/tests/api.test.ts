@@ -24,6 +24,7 @@ fs.writeFileSync(testConfigPath, [
   'jwt_expires_in = "8h"',
   'login_max_attempts = 3',
   'login_lockout_ms = 60000',
+  'upload_image_max_size_bytes = 5242880',
   'trust_proxy = true',
   'is_production = false',
   'cors_origins = []'
@@ -405,6 +406,14 @@ describe('route behavior', () => {
       uid: createdUser.uid,
       password_setup_required: false
     });
+  });
+
+  test('exposes upload size limit from config', async () => {
+    const response = await apiRequest('/api/config');
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(payload.upload_image_max_size_bytes).toBe(5 * 1024 * 1024);
   });
 
   test('rejects passwords longer than 32 characters in the backend', async () => {

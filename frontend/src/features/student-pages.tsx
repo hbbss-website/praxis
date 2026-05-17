@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import { ApiResponseError, createApiClient, unwrapResponse, uploadImage, validateUploadImageFiles } from '@/lib/api';
+import { ApiResponseError, createApiClient, formatUploadImageMaxSize, getRuntimeConfig, unwrapResponse, uploadImage, validateUploadImageFiles } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/feedback';
 import { formatDate, formatDateTime, formatDuration, normalizeDateInputValue, notificationLabel, statusLabel } from '@/lib/format';
 import { MAX_RECORD_IMAGES, type AppNotification, type RecordStatistics, type StudentRecord } from '@/lib/types';
@@ -277,6 +277,7 @@ export function StudentUploadPage() {
   const [loading, setLoading] = useState(Boolean(editId));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [uploadImageMaxSizeBytes, setUploadImageMaxSizeBytes] = useState(5 * 1024 * 1024);
   const [images, setImages] = useState<UploadImageItem[]>([]);
   const [coverImageId, setCoverImageId] = useState('');
   const localPreviewUrls = useRef(new Set<string>());
@@ -287,6 +288,12 @@ export function StudentUploadPage() {
     location: '',
     duration: ''
   });
+
+  useEffect(() => {
+    getRuntimeConfig()
+      .then((config) => setUploadImageMaxSizeBytes(config.upload_image_max_size_bytes))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!editId || !token) return;
@@ -341,7 +348,7 @@ export function StudentUploadPage() {
       <Card>
         <CardHeader>
           <CardTitle>{editId ? '保存修改' : '填写记录内容'}</CardTitle>
-          <CardDescription>实践日期不能晚于今天，时长最少 0.1 小时，图片大小不超过 5 MiB。</CardDescription>
+          <CardDescription>实践日期不能晚于今天，时长最少 0.1 小时，图片大小不超过 {formatUploadImageMaxSize(uploadImageMaxSizeBytes)}。</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -370,7 +377,7 @@ export function StudentUploadPage() {
                       };
                     }
 
-                    const uploadResult = await uploadImage(image.file!, token);
+                    const uploadResult = await uploadImage(image.file!, token, uploadImageMaxSizeBytes);
                     return {
                       id: image.id,
                       path: uploadResult.imageUrl
@@ -446,7 +453,7 @@ export function StudentUploadPage() {
                     </div>
                     <div>
                       <p className="text-sm font-medium">选择图片</p>
-                      <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">最多 {MAX_RECORD_IMAGES} 张，单张最大 5 MiB</p>
+                      <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">最多 {MAX_RECORD_IMAGES} 张，单张最大 {formatUploadImageMaxSize(uploadImageMaxSizeBytes)}</p>
                     </div>
                     <input
                       className="hidden"
@@ -464,7 +471,7 @@ export function StudentUploadPage() {
                           if (files.length > remainingImageSlots) {
                             throw new Error(`还能选择 ${remainingImageSlots} 张图片。`);
                           }
-                          validateUploadImageFiles(files);
+                          validateUploadImageFiles(files, uploadImageMaxSizeBytes);
                         } catch (nextError) {
                           event.target.value = '';
                           toastError(nextError);

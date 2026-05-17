@@ -15,6 +15,7 @@ export interface AppConfig {
   jwt_expires_in: string;
   login_max_attempts: number;
   login_lockout_ms: number;
+  upload_image_max_size_bytes: number;
   trust_proxy: boolean;
   is_production: boolean;
   cors_origins: string[];
@@ -42,6 +43,7 @@ function createDefaultConfig(): AppConfig {
     jwt_expires_in: '8h',
     login_max_attempts: 5,
     login_lockout_ms: 15 * 60 * 1000,
+    upload_image_max_size_bytes: 5 * 1024 * 1024,
     trust_proxy: false,
     is_production: false,
     cors_origins: []
@@ -94,6 +96,7 @@ function normalizeConfig(source: unknown): AppConfig {
     jwt_expires_in: getString(config, 'jwt_expires_in', fallback.jwt_expires_in),
     login_max_attempts: getPositiveInteger(config, 'login_max_attempts', fallback.login_max_attempts),
     login_lockout_ms: getPositiveInteger(config, 'login_lockout_ms', fallback.login_lockout_ms),
+    upload_image_max_size_bytes: getPositiveInteger(config, 'upload_image_max_size_bytes', fallback.upload_image_max_size_bytes),
     trust_proxy: getBoolean(config, 'trust_proxy', fallback.trust_proxy),
     is_production: getBoolean(config, 'is_production', fallback.is_production),
     cors_origins: getStringArray(config, 'cors_origins')
