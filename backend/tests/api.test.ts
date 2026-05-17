@@ -16,7 +16,8 @@ globalThis.__socialPracticeConfigFile = testConfigPath;
 fs.writeFileSync(testConfigPath, [
   'port = 3000',
   'vite_port = 5173',
-  'host = "0.0.0.0"',
+  'backend_host = "127.0.0.1"',
+  'frontend_host = "127.0.0.1"',
   `database_file = "${testDbPath}"`,
   `jwt_secret = "${testJwtSecret}"`,
   `jwt_issuer = "${testJwtIssuer}"`,

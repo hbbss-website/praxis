@@ -36,7 +36,7 @@
     "drizzle.config.ts",
     "frontend/src/**/*.ts",
     "frontend/src/**/*.tsx",
-    "frontend/vite.config.ts",
+    "vite.config.ts",
     "tests/**/*.ts"
   ],
   "exclude": [

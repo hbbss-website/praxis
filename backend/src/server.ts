@@ -4,7 +4,7 @@ import { app } from './app';
 import { appConfig } from './config';
 
 const port = appConfig.port;
-const hostname = appConfig.host;
+const hostname = appConfig.backend_host;
 
 serve({
   fetch: app.fetch,

@@ -8,9 +8,9 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev:backend": "tsx watch backend/src/server.ts",
-    "dev:frontend": "vite --host 0.0.0.0 --config frontend/vite.config.ts",
+    "dev:frontend": "vite",
     "dev": "concurrently -n \"API,WEB\" -c \"magenta,cyan\" \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
-    "build": "vite build --config frontend/vite.config.ts",
+    "build": "vite build",
     "start": "pnpm build && tsx backend/src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

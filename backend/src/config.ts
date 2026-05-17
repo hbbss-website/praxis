@@ -7,7 +7,8 @@ import { parse, stringify } from 'smol-toml';
 export interface AppConfig {
   port: number;
   vite_port: number;
-  host: string;
+  backend_host: string;
+  frontend_host: string;
   database_file: string;
   jwt_secret: string;
   jwt_issuer: string;
@@ -33,7 +34,8 @@ function createDefaultConfig(): AppConfig {
   return {
     port: 3000,
     vite_port: 5173,
-    host: '0.0.0.0',
+    backend_host: '127.0.0.1',
+    frontend_host: '127.0.0.1',
     database_file: 'backend/data/app.db',
     jwt_secret: randomSecret(),
     jwt_issuer: 'social-practice-system',
@@ -84,7 +86,8 @@ function normalizeConfig(source: unknown): AppConfig {
   return {
     port: getPositiveInteger(config, 'port', fallback.port),
     vite_port: getPositiveInteger(config, 'vite_port', fallback.vite_port),
-    host: getString(config, 'host', fallback.host),
+    backend_host: getString(config, 'backend_host', fallback.backend_host),
+    frontend_host: getString(config, 'frontend_host', fallback.frontend_host),
     database_file: getString(config, 'database_file', fallback.database_file),
     jwt_secret: getString(config, 'jwt_secret', fallback.jwt_secret),
     jwt_issuer: getString(config, 'jwt_issuer', fallback.jwt_issuer),
