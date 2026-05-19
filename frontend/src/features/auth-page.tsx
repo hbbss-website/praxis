@@ -8,6 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
 import { login } from '@/lib/api';
 import { toastError } from '@/lib/feedback';
 import { getDefaultPathByRole } from '@/lib/session';
@@ -120,6 +125,17 @@ export function LoginPage() {
                 {loading ? <Spinner className="size-4 text-current" /> : null}
                 {loading ? '登录中...' : '登录'}
               </Button>
+              <div className="flex justify-end">
+                <HoverCard openDelay={10} closeDelay={100}>
+                  <HoverCardTrigger asChild>
+                    <Button type="button" variant="link">忘记密码</Button>
+                  </HoverCardTrigger>
+                  <HoverCardContent className="flex w-max flex-col gap-0.5">
+                    <div>如果您是学生，请联系班主任修改密码；</div>
+                    <div>如果您是教师，请联系管理员修改密码。</div>
+                  </HoverCardContent>
+                </HoverCard>
+              </div>
             </form>
           </CardContent>
         </Card>
