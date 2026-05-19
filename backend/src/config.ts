@@ -15,6 +15,7 @@ export interface AppConfig {
   login_max_attempts: number;
   login_lockout_ms: number;
   upload_image_max_size_bytes: number;
+  temp_upload_ttl_ms: number;
   temp_upload_cleanup_interval_ms: number;
   trust_proxy: boolean;
   is_production: boolean;
@@ -43,6 +44,7 @@ function createDefaultConfig(): AppConfig {
     login_max_attempts: 5,
     login_lockout_ms: 15 * 60 * 1000,
     upload_image_max_size_bytes: 5 * 1024 * 1024,
+    temp_upload_ttl_ms: 30 * 60 * 1000,
     temp_upload_cleanup_interval_ms: 5000,
     trust_proxy: false,
     is_production: false,
@@ -96,6 +98,7 @@ function normalizeConfig(source: unknown): AppConfig {
     login_max_attempts: getPositiveInteger(config, 'login_max_attempts', fallback.login_max_attempts),
     login_lockout_ms: getPositiveInteger(config, 'login_lockout_ms', fallback.login_lockout_ms),
     upload_image_max_size_bytes: getPositiveInteger(config, 'upload_image_max_size_bytes', fallback.upload_image_max_size_bytes),
+    temp_upload_ttl_ms: getPositiveInteger(config, 'temp_upload_ttl_ms', fallback.temp_upload_ttl_ms),
     temp_upload_cleanup_interval_ms: getPositiveInteger(config, 'temp_upload_cleanup_interval_ms', fallback.temp_upload_cleanup_interval_ms),
     trust_proxy: getBoolean(config, 'trust_proxy', fallback.trust_proxy),
     is_production: getBoolean(config, 'is_production', fallback.is_production),

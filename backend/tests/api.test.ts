@@ -26,6 +26,7 @@ fs.writeFileSync(testConfigPath, [
   'login_max_attempts = 3',
   'login_lockout_ms = 60000',
   'upload_image_max_size_bytes = 5242880',
+  'temp_upload_ttl_ms = 1800000',
   'temp_upload_cleanup_interval_ms = 5000',
   'trust_proxy = true',
   'is_production = false',

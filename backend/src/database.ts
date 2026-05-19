@@ -37,7 +37,6 @@ const uploadDir = path.resolve(process.cwd(), 'backend/uploads');
 const tmpUploadDir = path.resolve(process.cwd(), 'backend/tmp-uploads');
 const uploadPathPattern = /^\/uploads\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const tmpUploadPathPattern = /^\/tmp-uploads\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const tempUploadTtlMs = 30 * 60 * 1000;
 const deletedUserName = '已删除用户';
 const generatedPasswordLength = 8;
 const rolePrefixes: Record<UserRole, string> = {
@@ -1111,7 +1110,7 @@ class SQLiteDatabase {
     }
 
     const createdAt = nowIso();
-    const expiresAt = new Date(Date.now() + tempUploadTtlMs).toISOString();
+    const expiresAt = new Date(Date.now() + appConfig.temp_upload_ttl_ms).toISOString();
 
     db.insert(tempUploadDeletions)
       .values({
