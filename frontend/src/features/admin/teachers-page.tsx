@@ -37,8 +37,16 @@ import { useShiftMultiSelect } from '@/lib/shift-selection';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { ClassAssignments, ClassSummary, CreatedUser, CreatedUserPayload, CreatedUsersPayload, CsvImportEntry, CsvImportPreview, StudentSummary, StudentWithClassSummary, TeacherStatistics, UserRole, UserSummary } from '@/lib/types';
 import { EmptyState } from '@/shared/empty-state';
+import { includesSearch, ListSearchBar, type ListSearchState } from '@/shared/list-search-bar';
 import { UserCredentialsResult } from '@/shared/user-credentials-result';
 import { AdminPageFrame, Field, SortButton, type CredentialsResult } from './shared';
+
+type UserSearchField = 'name' | 'uid';
+const userSearchOptions = [
+  { label: '姓名', value: 'name' },
+  { label: 'UID', value: 'uid' }
+] satisfies Array<{ label: string; value: UserSearchField }>;
+const defaultUserSearch: ListSearchState<UserSearchField> = { field: 'name', query: '' };
 
 export function AdminTeachersPage() {
   return <UserListPage role="teacher" title="教师列表" description="管理员可以维护教师信息，并清理无效账号。" />;
@@ -59,6 +67,8 @@ function UserListPage({
   const [classes, setClasses] = useState<ClassSummary[]>([]);
   const [assignments, setAssignments] = useState<ClassAssignments>({ teachers: [], students: [] });
   const [sortBy, setSortBy] = useState<'uid-asc' | 'uid-desc' | 'name-asc' | 'name-desc'>('uid-asc');
+  const [searchDraft, setSearchDraft] = useState<ListSearchState<UserSearchField>>(defaultUserSearch);
+  const [search, setSearch] = useState<ListSearchState<UserSearchField>>(defaultUserSearch);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [editing, setEditing] = useState<UserSummary | null>(null);
   const [form, setForm] = useState({ name: '', password: '' });
@@ -99,14 +109,21 @@ function UserListPage({
     void loadUsers();
   }, [role, token]);
 
+  const searchedUsers = useMemo(() => {
+    const query = search.query.trim();
+    if (!query) return users;
+
+    return users.filter((user) => includesSearch(search.field === 'uid' ? user.uid : user.name, query));
+  }, [search, users]);
+
   const sortedUsers = useMemo(() => {
-    return [...users].sort((left, right) => {
+    return [...searchedUsers].sort((left, right) => {
       if (sortBy === 'uid-desc') return right.uid.localeCompare(left.uid);
       if (sortBy === 'name-asc') return left.name.localeCompare(right.name);
       if (sortBy === 'name-desc') return right.name.localeCompare(left.name);
       return left.uid.localeCompare(right.uid);
     });
-  }, [sortBy, users]);
+  }, [searchedUsers, sortBy]);
 
   const userIds = useMemo(() => sortedUsers.map((user) => user.id), [sortedUsers]);
   const selectedUserIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -219,13 +236,26 @@ function UserListPage({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            {selectedIds.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-slate-100 p-3">
-                <p className="mr-2 text-sm text-muted-foreground">已选 {selectedIds.length} 人</p>
-                <Button size="sm" onClick={() => setBatchResetOpen(true)}>重置密码</Button>
-                <Button size="sm" variant="destructive" onClick={() => setBatchDeleteOpen(true)}>删除</Button>
-              </div>
-            ) : <div />}
+            <div className="flex flex-wrap items-center gap-3">
+              {selectedIds.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-slate-100 p-3">
+                  <p className="mr-2 text-sm text-muted-foreground">已选 {selectedIds.length} 人</p>
+                  <Button size="sm" onClick={() => setBatchResetOpen(true)}>重置密码</Button>
+                  <Button size="sm" variant="destructive" onClick={() => setBatchDeleteOpen(true)}>删除</Button>
+                </div>
+              ) : null}
+              <ListSearchBar
+                value={searchDraft}
+                options={userSearchOptions}
+                placeholder={searchDraft.field === 'uid' ? '搜索 UID' : '搜索姓名'}
+                onChange={setSearchDraft}
+                onSearch={() => {
+                  setSearch({ field: searchDraft.field, query: searchDraft.query.trim() });
+                  setSelectedIds([]);
+                  resetSelectionAnchor();
+                }}
+              />
+            </div>
             <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
               <SelectTrigger className="w-52">
                 <SelectValue />
@@ -239,7 +269,7 @@ function UserListPage({
             </Select>
           </div>
           {sortedUsers.length === 0 ? (
-            <EmptyState title="暂无账号" description="在用户创建页添加账号后，这里会同步显示。" />
+            <EmptyState title={users.length === 0 ? '暂无账号' : '没有匹配的账号'} description={users.length === 0 ? '在用户创建页添加账号后，这里会同步显示。' : '调整搜索条件后再试。'} />
           ) : (
             <DataTable columns={columns} data={sortedUsers} />
           )}

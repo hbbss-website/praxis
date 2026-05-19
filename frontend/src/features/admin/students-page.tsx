@@ -36,8 +36,16 @@ import { useShiftMultiSelect } from '@/lib/shift-selection';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { ClassAssignments, ClassSummary, CreatedUser, CreatedUserPayload, CreatedUsersPayload, CsvImportEntry, CsvImportPreview, StudentSummary, StudentWithClassSummary, TeacherStatistics, UserRole, UserSummary } from '@/lib/types';
 import { EmptyState } from '@/shared/empty-state';
+import { includesSearch, ListSearchBar, type ListSearchState } from '@/shared/list-search-bar';
 import { UserCredentialsResult } from '@/shared/user-credentials-result';
 import { AdminPageFrame, compareStudentClass, Field, formatStudentClass, SelectClass, SortButton, type CredentialsResult } from './shared';
+
+type StudentSearchField = 'name' | 'uid';
+const studentSearchOptions = [
+  { label: '姓名', value: 'name' },
+  { label: 'UID', value: 'uid' }
+] satisfies Array<{ label: string; value: StudentSearchField }>;
+const defaultStudentSearch: ListSearchState<StudentSearchField> = { field: 'name', query: '' };
 
 export function AdminStudentsPage() {
   return <AdminStudentListPage />;
@@ -51,6 +59,8 @@ function AdminStudentListPage() {
   const [classes, setClasses] = useState<ClassSummary[]>([]);
   const [durations, setDurations] = useState<Record<number, number>>({});
   const [sortBy, setSortBy] = useState<'duration-desc' | 'duration-asc' | 'uid-asc' | 'uid-desc' | 'name-asc' | 'name-desc' | 'class-asc' | 'class-desc'>('duration-desc');
+  const [searchDraft, setSearchDraft] = useState<ListSearchState<StudentSearchField>>(defaultStudentSearch);
+  const [search, setSearch] = useState<ListSearchState<StudentSearchField>>(defaultStudentSearch);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [editing, setEditing] = useState<StudentWithClassSummary | null>(null);
   const [form, setForm] = useState({ name: '', password: '', class_id: null as number | null });
@@ -93,8 +103,15 @@ function AdminStudentListPage() {
     void reload();
   }, [token]);
 
+  const searchedStudents = useMemo(() => {
+    const query = search.query.trim();
+    if (!query) return students;
+
+    return students.filter((student) => includesSearch(search.field === 'uid' ? student.uid : student.name, query));
+  }, [search, students]);
+
   const sortedStudents = useMemo(() => {
-    return [...students].sort((left, right) => {
+    return [...searchedStudents].sort((left, right) => {
       const leftDuration = durations[left.id] ?? 0;
       const rightDuration = durations[right.id] ?? 0;
       if (sortBy === 'duration-desc') return rightDuration - leftDuration || left.name.localeCompare(right.name);
@@ -106,7 +123,7 @@ function AdminStudentListPage() {
       if (sortBy === 'name-desc') return right.name.localeCompare(left.name);
       return left.name.localeCompare(right.name);
     });
-  }, [durations, sortBy, students]);
+  }, [durations, searchedStudents, sortBy]);
 
   const studentIds = useMemo(() => sortedStudents.map((student) => student.id), [sortedStudents]);
   const selectedStudentIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -217,27 +234,40 @@ function AdminStudentListPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            {selectedIds.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-slate-100 p-3">
-                <p className="mr-2 text-sm text-muted-foreground">已选 {selectedIds.length} 人</p>
-                <Button size="sm" onClick={() => setBatchResetOpen(true)}>重置密码</Button>
-                <Select value={batchClassId ? String(batchClassId) : '__none__'} onValueChange={(value) => setBatchClassId(value === '__none__' ? null : Number(value))}>
-                  <SelectTrigger className="h-8 w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">未分配班级</SelectItem>
-                    {classes.map((item) => (
-                      <SelectItem key={item.id} value={String(item.id)}>
-                        {item.name} ({item.cid})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button size="sm" variant="outline" onClick={() => void updateSelectedClass()}>批量改班级</Button>
-                <Button size="sm" variant="destructive" onClick={() => setBatchDeleteOpen(true)}>删除</Button>
-              </div>
-            ) : <div />}
+            <div className="flex flex-wrap items-center gap-3">
+              {selectedIds.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-slate-100 p-3">
+                  <p className="mr-2 text-sm text-muted-foreground">已选 {selectedIds.length} 人</p>
+                  <Button size="sm" onClick={() => setBatchResetOpen(true)}>重置密码</Button>
+                  <Select value={batchClassId ? String(batchClassId) : '__none__'} onValueChange={(value) => setBatchClassId(value === '__none__' ? null : Number(value))}>
+                    <SelectTrigger className="h-8 w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">未分配班级</SelectItem>
+                      {classes.map((item) => (
+                        <SelectItem key={item.id} value={String(item.id)}>
+                          {item.name} ({item.cid})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="outline" onClick={() => void updateSelectedClass()}>批量改班级</Button>
+                  <Button size="sm" variant="destructive" onClick={() => setBatchDeleteOpen(true)}>删除</Button>
+                </div>
+              ) : null}
+              <ListSearchBar
+                value={searchDraft}
+                options={studentSearchOptions}
+                placeholder={searchDraft.field === 'uid' ? '搜索 UID' : '搜索姓名'}
+                onChange={setSearchDraft}
+                onSearch={() => {
+                  setSearch({ field: searchDraft.field, query: searchDraft.query.trim() });
+                  setSelectedIds([]);
+                  resetSelectionAnchor();
+                }}
+              />
+            </div>
 
             <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
               <SelectTrigger className="w-52">
@@ -257,7 +287,7 @@ function AdminStudentListPage() {
           </div>
 
           {sortedStudents.length === 0 ? (
-            <EmptyState title="暂无账号" description="在用户创建页添加学生账号后，这里会同步显示。" />
+            <EmptyState title={students.length === 0 ? '暂无账号' : '没有匹配的账号'} description={students.length === 0 ? '在用户创建页添加学生账号后，这里会同步显示。' : '调整搜索条件后再试。'} />
           ) : (
             <DataTable batchSize={60} columns={columns} data={sortedStudents} />
           )}

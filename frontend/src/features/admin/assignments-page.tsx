@@ -36,8 +36,16 @@ import { useShiftMultiSelect } from '@/lib/shift-selection';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { ClassAssignments, ClassSummary, CreatedUser, CreatedUserPayload, CreatedUsersPayload, CsvImportEntry, CsvImportPreview, StudentSummary, StudentWithClassSummary, TeacherStatistics, UserRole, UserSummary } from '@/lib/types';
 import { EmptyState } from '@/shared/empty-state';
+import { includesSearch, ListSearchBar, type ListSearchState } from '@/shared/list-search-bar';
 import { UserCredentialsResult } from '@/shared/user-credentials-result';
 import { AdminPageFrame, comboboxPageSize, Field } from './shared';
+
+type ClassSearchField = 'name' | 'cid';
+const classSearchOptions = [
+  { label: '名称', value: 'name' },
+  { label: 'CID', value: 'cid' }
+] satisfies Array<{ label: string; value: ClassSearchField }>;
+const defaultClassSearch: ListSearchState<ClassSearchField> = { field: 'name', query: '' };
 
 export function AdminAssignmentsPage() {
   const { token, signOut } = useSession();
@@ -46,6 +54,8 @@ export function AdminAssignmentsPage() {
   const [students, setStudents] = useState<StudentWithClassSummary[]>([]);
   const [assignments, setAssignments] = useState<ClassAssignments>({ teachers: [], students: [] });
   const [visibleCount, setVisibleCount] = useState(comboboxPageSize);
+  const [searchDraft, setSearchDraft] = useState<ListSearchState<ClassSearchField>>(defaultClassSearch);
+  const [search, setSearch] = useState<ListSearchState<ClassSearchField>>(defaultClassSearch);
   const [creating, setCreating] = useState(false);
   const [editingClassId, setEditingClassId] = useState<number | null>(null);
 
@@ -96,7 +106,13 @@ export function AdminAssignmentsPage() {
 
     return next;
   }, [students]);
-  const visibleClasses = useMemo(() => classes.slice(0, visibleCount), [classes, visibleCount]);
+  const searchedClasses = useMemo(() => {
+    const query = search.query.trim();
+    if (!query) return classes;
+
+    return classes.filter((item) => includesSearch(search.field === 'cid' ? item.cid : item.name, query));
+  }, [classes, search]);
+  const visibleClasses = useMemo(() => searchedClasses.slice(0, visibleCount), [searchedClasses, visibleCount]);
 
   function loadMoreClasses(event: React.UIEvent<HTMLDivElement>) {
     const element = event.currentTarget;
@@ -105,12 +121,22 @@ export function AdminAssignmentsPage() {
       return;
     }
 
-    setVisibleCount((current) => Math.min(current + comboboxPageSize, classes.length));
+    setVisibleCount((current) => Math.min(current + comboboxPageSize, searchedClasses.length));
   }
 
   return (
     <AdminPageFrame title="班级管理" description="管理员可以创建班级，并维护每个班级的教师和学生。">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ListSearchBar
+          value={searchDraft}
+          options={classSearchOptions}
+          placeholder={searchDraft.field === 'cid' ? '搜索 CID' : '搜索名称'}
+          onChange={setSearchDraft}
+          onSearch={() => {
+            setSearch({ field: searchDraft.field, query: searchDraft.query.trim() });
+            setVisibleCount(comboboxPageSize);
+          }}
+        />
         <Button onClick={() => setCreating(true)}>
           <Plus className="size-4" />
           添加班级
@@ -145,7 +171,7 @@ export function AdminAssignmentsPage() {
 
       <div className="max-h-[calc(100vh-220px)] space-y-4 overflow-y-auto pr-1" onScroll={loadMoreClasses}>
         {visibleClasses.length === 0 && !creating ? (
-          <EmptyState title="暂无班级" description="点击添加班级创建第一个班级。" />
+          <EmptyState title={classes.length === 0 ? '暂无班级' : '没有匹配的班级'} description={classes.length === 0 ? '点击添加班级创建第一个班级。' : '调整搜索条件后再试。'} />
         ) : null}
 
         {visibleClasses.map((item) => {
