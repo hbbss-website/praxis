@@ -12,6 +12,7 @@ import {
   batchReviewBodySchema,
   buildReviewNotificationMessage,
   isValidRecordImagePath,
+  isValidUploadPath,
   normalizeOptionalString,
   normalizeRecordFilters,
   parseDuration,
@@ -99,7 +100,7 @@ function validateRecordImages(imagePaths: string[], coverImagePath: string | nul
     return '图片不能重复。';
   }
 
-  if (imagePaths.some((imagePath) => !isValidRecordImagePath(imagePath))) {
+  if (imagePaths.some((imagePath) => !isValidRecordImagePath(imagePath) && !isValidUploadPath(imagePath))) {
     return '图片路径无效。';
   }
 
@@ -266,13 +267,15 @@ export const teacherRoutes = new Hono<AppBindings>()
       updates.duration = value;
     }
 
-    const imagePaths = Array.isArray(body.image_paths) ? body.image_paths : [];
-    const coverImagePath = body.cover_image_path !== undefined ? normalizeOptionalString(body.cover_image_path) : imagePaths[0] ?? null;
-    const imageError = validateRecordImages(imagePaths, coverImagePath);
-    if (imageError) return apiError(c, 400, imageError);
+    if (body.image_paths !== undefined || body.cover_image_path !== undefined) {
+      const imagePaths = Array.isArray(body.image_paths) ? body.image_paths : record.image_paths;
+      const coverImagePath = body.cover_image_path !== undefined ? normalizeOptionalString(body.cover_image_path) : record.cover_image_path;
+      const imageError = validateRecordImages(imagePaths, coverImagePath);
+      if (imageError) return apiError(c, 400, imageError);
 
-    updates.image_paths = imagePaths;
-    updates.cover_image_path = coverImagePath;
+      updates.image_paths = imagePaths;
+      updates.cover_image_path = coverImagePath ?? imagePaths[0] ?? null;
+    }
 
     try {
       database.updateRecord(record.id, updates);

@@ -1011,17 +1011,20 @@ class SQLiteDatabase {
     if (updates.location !== undefined) nextValues.location = updates.location;
     if (updates.duration !== undefined) nextValues.duration = updates.duration;
     if (updates.image_paths !== undefined || updates.cover_image_path !== undefined) {
-      for (const imagePath of current.image_paths) {
-        this.removeUploadFile(imagePath);
-      }
-
       const images = this.prepareRecordImages(
         updates.image_paths !== undefined ? updates.image_paths : current.image_paths,
-        updates.cover_image_path !== undefined ? updates.cover_image_path : current.cover_image_path
+        updates.cover_image_path !== undefined ? updates.cover_image_path : current.cover_image_path,
+        current.image_paths
       );
 
       nextValues.imagePaths = serializeImagePaths(images.imagePaths);
       nextValues.coverImagePath = images.coverImagePath;
+
+      for (const imagePath of current.image_paths) {
+        if (!images.imagePaths.includes(imagePath)) {
+          this.removeUploadFile(imagePath);
+        }
+      }
     }
     if (updates.status !== undefined) nextValues.status = updates.status;
     if (updates.teacher_comment !== undefined) nextValues.teacherComment = updates.teacher_comment;
@@ -1333,12 +1336,33 @@ class SQLiteDatabase {
     };
   }
 
-  private prepareRecordImages(imagePathsInput: string[], coverImagePathInput: string | null | undefined) {
-    const sourceImagePaths = normalizeIncomingRecordImagePaths(JSON.stringify(imagePathsInput));
+  private prepareRecordImages(imagePathsInput: string[], coverImagePathInput: string | null | undefined, reusableImagePaths: string[] = []) {
+    const sourceImagePaths = [...new Set(imagePathsInput)].slice(0, MAX_RECORD_IMAGES);
+    const reusableImagePathSet = new Set(reusableImagePaths);
     const movedImagePaths = new Map<string, string>();
     const imagePaths: string[] = [];
 
     for (const sourceImagePath of sourceImagePaths) {
+      if (uploadPathPattern.test(sourceImagePath)) {
+        if (!reusableImagePathSet.has(sourceImagePath)) {
+          throw new Error('图片路径无效。');
+        }
+
+        const sourceFilePath = this.resolveUploadFilePath(sourceImagePath);
+
+        if (!sourceFilePath || !fs.existsSync(sourceFilePath)) {
+          throw new Error('图片文件不存在或已过期。');
+        }
+
+        movedImagePaths.set(sourceImagePath, sourceImagePath);
+        imagePaths.push(sourceImagePath);
+        continue;
+      }
+
+      if (!tmpUploadPathPattern.test(sourceImagePath)) {
+        throw new Error('图片路径无效。');
+      }
+
       const sourceFilePath = this.resolveTmpUploadFilePath(sourceImagePath);
 
       if (!sourceFilePath || !fs.existsSync(sourceFilePath)) {

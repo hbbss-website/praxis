@@ -331,6 +331,49 @@ describe('assignments, records and notifications', () => {
     expect(fs.existsSync(updatedImagePaths[0]!)).toBe(false);
   });
 
+  test('keeps reused record images and removes only deleted images', () => {
+    const student = database.findUserByUid('S00002');
+    expect(student).toBeTruthy();
+
+    const firstImage = createTempUpload(`test-record-image-${Date.now()}-keep-1.webp`, 'first');
+    const secondImage = createTempUpload(`test-record-image-${Date.now()}-keep-2.webp`, 'second');
+    const thirdImage = createTempUpload(`test-record-image-${Date.now()}-keep-3.webp`, 'third');
+
+    const record = database.createRecord({
+      student_id: student!.id,
+      title: '保留图片记录',
+      content: '测试保留和追加图片',
+      practice_date: '2026-01-12',
+      location: '实验室',
+      duration: 1,
+      image_paths: [firstImage.imagePath, secondImage.imagePath],
+      cover_image_path: secondImage.imagePath
+    });
+    const firstStoredFile = path.join(testUploadDir, path.basename(record.image_paths[0]!));
+    const secondStoredFile = path.join(testUploadDir, path.basename(record.image_paths[1]!));
+    cleanupUploadFiles.add(firstStoredFile);
+    cleanupUploadFiles.add(secondStoredFile);
+
+    const updatedRecord = database.updateRecord(record.id, {
+      image_paths: [record.image_paths[1]!, thirdImage.imagePath],
+      cover_image_path: record.image_paths[1]!
+    });
+    const thirdStoredFile = path.join(testUploadDir, path.basename(updatedRecord!.image_paths[1]!));
+    cleanupUploadFiles.add(thirdStoredFile);
+
+    expect(updatedRecord?.image_paths[0]).toBe(record.image_paths[1]);
+    expect(updatedRecord?.image_paths[1]).toMatch(/^\/uploads\/.+\.webp$/);
+    expect(updatedRecord?.cover_image_path).toBe(record.image_paths[1]);
+    expect(fs.existsSync(firstStoredFile)).toBe(false);
+    expect(fs.existsSync(secondStoredFile)).toBe(true);
+    expect(fs.existsSync(thirdImage.filePath)).toBe(false);
+    expect(fs.existsSync(thirdStoredFile)).toBe(true);
+
+    expect(database.deleteRecord(record.id, updatedRecord?.image_paths)).toBe(true);
+    expect(fs.existsSync(secondStoredFile)).toBe(false);
+    expect(fs.existsSync(thirdStoredFile)).toBe(false);
+  });
+
   test('keeps deleted student records visible to the assigned teacher', async () => {
     const teacher = database.findUserByUid('T00001');
     const student = await database.createUser('将被删除的学生', 'student');
@@ -637,6 +680,47 @@ describe('route behavior', () => {
     expect(response.status).toBe(200);
     expect(database.getRecordById(record.id)?.status).toBe('pending');
     expect(database.getRecordById(record.id)?.teacher_comment).toBeNull();
+  });
+
+  test('keeps existing images when student edit omits image fields', async () => {
+    await setNormalPassword('S00001', 'student-pass-01');
+    const student = database.findUserByUid('S00001')!;
+    const image = createTempUpload(`test-record-image-${Date.now()}-student-keep.webp`, 'image');
+    const record = database.createRecord({
+      student_id: student.id,
+      title: '保留图片记录',
+      content: '第一次提交',
+      practice_date: '2026-01-13',
+      location: '操场',
+      duration: 1,
+      image_paths: [image.imagePath],
+      cover_image_path: image.imagePath
+    });
+    const storedFile = path.join(testUploadDir, path.basename(record.image_paths[0]!));
+    cleanupUploadFiles.add(storedFile);
+
+    const token = await loginAs(student.uid, 'student-pass-01');
+    const response = await jsonRequest(`/api/students/me/records/${record.id}`, {
+      title: '已修改记录',
+      content: '只修改文字',
+      practice_date: '2026-01-13',
+      location: '操场',
+      duration: '1.0'
+    }, {
+      method: 'PUT',
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+    const updatedRecord = database.getRecordById(record.id);
+
+    expect(response.status).toBe(200);
+    expect(updatedRecord?.image_paths).toEqual(record.image_paths);
+    expect(updatedRecord?.cover_image_path).toBe(record.cover_image_path);
+    expect(fs.existsSync(storedFile)).toBe(true);
+
+    expect(database.deleteRecord(record.id, updatedRecord?.image_paths)).toBe(true);
+    expect(fs.existsSync(storedFile)).toBe(false);
   });
 
   test('prevents admins from deleting themselves', async () => {

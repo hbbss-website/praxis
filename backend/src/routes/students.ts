@@ -182,13 +182,15 @@ export const studentRoutes = new Hono<AppBindings>()
       updates.duration = payload.duration!;
     }
 
-    const imagePaths = payload.imagePaths ?? [];
-    const coverImagePath = payload.coverImagePath ?? imagePaths[0] ?? null;
-    const imageError = validateRecordImages(imagePaths, coverImagePath);
-    if (imageError) return apiError(c, 400, imageError);
+    if (payload.imagePaths !== undefined || payload.coverImagePath !== undefined) {
+      const imagePaths = payload.imagePaths ?? record.image_paths;
+      const coverImagePath = payload.coverImagePath !== undefined ? payload.coverImagePath : record.cover_image_path;
+      const imageError = validateRecordImages(imagePaths, coverImagePath);
+      if (imageError) return apiError(c, 400, imageError);
 
-    updates.image_paths = imagePaths;
-    updates.cover_image_path = coverImagePath;
+      updates.image_paths = imagePaths;
+      updates.cover_image_path = coverImagePath ?? imagePaths[0] ?? null;
+    }
 
     if (record.status === 'rejected') {
       updates.status = 'pending';

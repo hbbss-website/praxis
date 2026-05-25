@@ -92,8 +92,7 @@ export function StudentUploadPage() {
     localPreviewUrls.current.clear();
   }, []);
 
-  const replacingStoredImages = Boolean(editId && images.some((image) => image.path));
-  const remainingImageSlots = replacingStoredImages ? MAX_RECORD_IMAGES : MAX_RECORD_IMAGES - images.length;
+  const remainingImageSlots = MAX_RECORD_IMAGES - images.length;
 
   return (
     <StudentPageFrame
@@ -124,8 +123,7 @@ export function StudentUploadPage() {
                     throw new Error(`每条记录最多上传 ${MAX_RECORD_IMAGES} 张图片。`);
                   }
 
-                  const submitImages = editId ? images.filter((image) => image.file) : images;
-                  const uploadedImages = await Promise.all(submitImages.map(async (image) => {
+                  const uploadedImages = await Promise.all(images.map(async (image) => {
                     if (image.path) {
                       return {
                         id: image.id,
@@ -245,13 +243,9 @@ export function StudentUploadPage() {
                           localPreviewUrls.current.add(image.preview);
                         }
                         setImages((current) => {
-                          const hasStoredImages = editId && current.some((image) => image.path);
-                          const merged = hasStoredImages ? nextImages : [...current, ...nextImages];
+                          const merged = [...current, ...nextImages];
                           if (!coverImageId && merged[0]) {
                             setCoverImageId(merged[0].id);
-                          }
-                          if (hasStoredImages) {
-                            setCoverImageId(merged[0]?.id ?? '');
                           }
                           return merged;
                         });

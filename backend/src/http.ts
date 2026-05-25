@@ -249,7 +249,7 @@ export function isValidTmpUploadPath(value: string) {
 }
 
 export function isValidRecordImagePath(value: string) {
-  return isValidTmpUploadPath(value);
+  return isValidTmpUploadPath(value) || isValidUploadPath(value);
 }
 
 export function validatePracticeDate(value: string) {
