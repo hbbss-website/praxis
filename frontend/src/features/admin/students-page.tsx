@@ -52,7 +52,7 @@ export function AdminStudentsPage() {
 
 
 function AdminStudentListPage() {
-  const { token, signOut } = useSession();
+  const { signOut } = useSession();
   const { captureShiftKey, resetSelectionAnchor, updateSelection } = useShiftMultiSelect();
   const [students, setStudents] = useState<StudentWithClassSummary[]>([]);
   const [classes, setClasses] = useState<ClassSummary[]>([]);
@@ -72,10 +72,8 @@ function AdminStudentListPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   async function reload() {
-    if (!token) return;
-
     try {
-      const api = createApiClient(token);
+      const api = createApiClient();
       const [studentsData, statisticsData, classesData] = await Promise.all([
         unwrapResponse<{ students: StudentWithClassSummary[] }>(api.teacher.students.get()),
         unwrapResponse<{ statistics: TeacherStatistics }>(api.teacher.statistics.get()),
@@ -98,9 +96,8 @@ function AdminStudentListPage() {
   }
 
   useEffect(() => {
-    if (!token) return;
     void reload();
-  }, [token]);
+  }, []);
 
   const searchedStudents = useMemo(() => {
     const query = search.query.trim();
@@ -314,10 +311,10 @@ function AdminStudentListPage() {
             <SelectClass classes={classes} value={form.class_id} onChange={(class_id) => setForm((current) => ({ ...current, class_id }))} />
             <Button
               onClick={async () => {
-                if (!token || !editing) return;
+                if (!editing) return;
 
                 try {
-                  await unwrapResponse(createApiClient(token).admin.users({ id: editing.id }).put({
+                  await unwrapResponse(createApiClient().admin.users({ id: editing.id }).put({
                     name: form.name.trim(),
                     password: form.password,
                     class_id: form.class_id
@@ -349,12 +346,10 @@ function AdminStudentListPage() {
         confirmLabel="重置密码"
         loading={resetLoading}
         onConfirm={async () => {
-          if (!token) return;
-
           try {
             setResetLoading(true);
             const data = await unwrapResponse<CreatedUsersPayload>(
-              createApiClient(token).admin.users.password.patch({ ids: selectedIds })
+              createApiClient().admin.users.password.patch({ ids: selectedIds })
             );
             setBatchResetOpen(false);
             setResetResult({ users: data.users, credentialsCsv: data.credentialsCsv });
@@ -385,11 +380,11 @@ function AdminStudentListPage() {
         loading={deleteLoading}
         variant="destructive"
         onConfirm={async () => {
-          if (!token || !deleteTarget) return;
+          if (!deleteTarget) return;
 
           try {
             setDeleteLoading(true);
-            await unwrapResponse(createApiClient(token).admin.users({ id: deleteTarget.id }).delete());
+            await unwrapResponse(createApiClient().admin.users({ id: deleteTarget.id }).delete());
             setDeleteTarget(null);
             toastSuccess('学生账号已删除。');
             await reload();
@@ -415,11 +410,9 @@ function AdminStudentListPage() {
         loading={deleteLoading}
         variant="destructive"
         onConfirm={async () => {
-          if (!token) return;
-
           try {
             setDeleteLoading(true);
-            await unwrapResponse(createApiClient(token).admin.users.delete({ ids: selectedIds }));
+            await unwrapResponse(createApiClient().admin.users.delete({ ids: selectedIds }));
             setBatchDeleteOpen(false);
             toastSuccess(`已删除 ${selectedIds.length} 个学生账号。`);
             await reload();
@@ -439,10 +432,10 @@ function AdminStudentListPage() {
   );
 
   async function updateSelectedClass() {
-    if (!token || selectedIds.length === 0) return;
+    if (selectedIds.length === 0) return;
 
     try {
-      await unwrapResponse(createApiClient(token).admin.students.class.patch({ ids: selectedIds, class_id: batchClassId }));
+      await unwrapResponse(createApiClient().admin.students.class.patch({ ids: selectedIds, class_id: batchClassId }));
       toastSuccess('班级已更新。');
       await reload();
     } catch (error) {

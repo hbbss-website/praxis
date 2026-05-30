@@ -20,7 +20,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 echarts.use([BarChart, LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
 export function TeacherDashboardPage() {
-  const { token, signOut, user } = useSession();
+  const { signOut, user } = useSession();
   const [classes, setClasses] = useState<ClassSummary[]>([]);
   const [classId, setClassId] = useState<string>('all');
   const [overview, setOverview] = useState<OverviewData | null>(null);
@@ -28,12 +28,11 @@ export function TeacherDashboardPage() {
   const [error, setError] = useState('');
 
   async function load() {
-    if (!token) return;
     setLoading(true);
     setError('');
 
     try {
-      const api = createApiClient(token);
+      const api = createApiClient();
       const [classesData, overviewData] = await Promise.all([
         unwrapResponse<{ classes: ClassSummary[] }>(api.teacher.classes.get()),
         unwrapResponse<{ overview: OverviewData }>(api.teacher.overview.get({ query: { class_id: classId === 'all' ? undefined : classId } }))
@@ -53,7 +52,7 @@ export function TeacherDashboardPage() {
 
   useEffect(() => {
     void load();
-  }, [classId, token]);
+  }, [classId]);
 
   const totals = overview?.classes.reduce((acc, item) => ({
     student_count: acc.student_count + item.student_count,

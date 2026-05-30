@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import { z } from 'zod';
 
+import { appConfig } from './config';
 import type { PublicUser, RecordFilters, RecordStatus, UserRole } from './models';
 import { MAX_RECORD_IMAGES, notificationTypes, recordStatuses, userRoles } from './models';
 import type { AppBindings } from './plugins/auth';
@@ -11,15 +12,15 @@ const uploadPathPattern = /^\/uploads\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const tmpUploadPathPattern = /^\/tmp-uploads\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
 
-export const USER_NAME_MAX_LENGTH = 40;
-export const TITLE_MAX_LENGTH = 120;
-export const LOCATION_MAX_LENGTH = 120;
-export const CONTENT_MAX_LENGTH = 5000;
-export const COMMENT_MAX_LENGTH = 500;
-export const PASSWORD_MIN_LENGTH = 8;
-export const PASSWORD_MAX_LENGTH = 32;
-export const UID_MAX_LENGTH = 32;
-export const MAX_RECORD_DURATION = 24;
+export const USER_NAME_MAX_LENGTH = appConfig.user_name_max_length;
+export const TITLE_MAX_LENGTH = appConfig.title_max_length;
+export const LOCATION_MAX_LENGTH = appConfig.location_max_length;
+export const CONTENT_MAX_LENGTH = appConfig.content_max_length;
+export const COMMENT_MAX_LENGTH = appConfig.comment_max_length;
+export const PASSWORD_MIN_LENGTH = appConfig.password_min_length;
+export const PASSWORD_MAX_LENGTH = appConfig.password_max_length;
+export const UID_MAX_LENGTH = appConfig.uid_max_length;
+export const MAX_RECORD_DURATION = appConfig.max_record_duration;
 
 export const userRoleSchema = z.enum(userRoles);
 export const recordStatusSchema = z.enum(recordStatuses);

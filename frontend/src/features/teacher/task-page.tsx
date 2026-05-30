@@ -22,7 +22,7 @@ import { formToPayload, taskToForm, TaskFormDialog, type TaskFormState } from '.
 export function TeacherTaskPage() {
   const { id } = useParams();
   const taskId = Number(id);
-  const { token, signOut, user } = useSession();
+  const { signOut, user } = useSession();
   const navigate = useNavigate();
   const basePath = user?.role === 'admin' ? '/admin/tasks' : '/teacher/tasks';
   const [task, setTask] = useState<PracticeTaskDetail | null>(null);
@@ -43,12 +43,12 @@ export function TeacherTaskPage() {
   const [exportClassIds, setExportClassIds] = useState<number[]>([]);
 
   async function loadTask() {
-    if (!token || !Number.isInteger(taskId)) return;
+    if (!Number.isInteger(taskId)) return;
     setLoading(true);
     setError('');
 
     try {
-      const api = createApiClient(token);
+      const api = createApiClient();
       const [taskData, classData] = await Promise.all([
         unwrapResponse<{ task: PracticeTaskDetail }>(api.teacher.tasks({ id: taskId }).get()),
         unwrapResponse<{ classes: ClassSummary[] }>(api.teacher.classes.get())
@@ -67,11 +67,11 @@ export function TeacherTaskPage() {
   }
 
   async function loadRecords() {
-    if (!token || !Number.isInteger(taskId)) return;
+    if (!Number.isInteger(taskId)) return;
     setRecordsLoading(true);
 
     try {
-      const data = await unwrapResponse<{ records: TeacherRecordSummary[] }>(createApiClient(token).teacher.records.get({
+      const data = await unwrapResponse<{ records: TeacherRecordSummary[] }>(createApiClient().teacher.records.get({
         query: {
           task_id: String(taskId),
           student_ids: filters.student_ids.length > 0 ? filters.student_ids.join(',') : undefined,
@@ -97,11 +97,11 @@ export function TeacherTaskPage() {
 
   useEffect(() => {
     void loadTask();
-  }, [taskId, token]);
+  }, [taskId]);
 
   useEffect(() => {
     void loadRecords();
-  }, [taskId, token, filters]);
+  }, [taskId, filters]);
 
   const loadClassOptions = useCallback(async (query: string) => {
     const normalized = query.trim().toLowerCase();
@@ -111,9 +111,8 @@ export function TeacherTaskPage() {
   }, [classes]);
 
   const searchStudents = useCallback(async (query: string) => {
-    if (!token) return [];
     try {
-      const data = await unwrapResponse<{ students: StudentWithClassSummary[] }>(createApiClient(token).teacher.students.search({
+      const data = await unwrapResponse<{ students: StudentWithClassSummary[] }>(createApiClient().teacher.students.search({
         query: {
           q: query.trim() || undefined,
           class_ids: filters.class_ids.length > 0 ? filters.class_ids.join(',') : task?.classes.map((item) => item.id).join(',')
@@ -123,7 +122,7 @@ export function TeacherTaskPage() {
     } catch {
       return [];
     }
-  }, [filters.class_ids, task, token]);
+  }, [filters.class_ids, task]);
 
   const columns = useMemo<Array<ColumnDef<TeacherRecordSummary>>>(() => [
     { accessorKey: 'student_name', header: '学生' },
@@ -137,14 +136,13 @@ export function TeacherTaskPage() {
       header: '操作',
       cell: ({ row }) => (
         <Button size="sm" onClick={async () => {
-          if (!token) return;
-          const data = await unwrapResponse<{ record: TeacherRecord }>(createApiClient(token).teacher.records({ id: row.original.id }).get());
+          const data = await unwrapResponse<{ record: TeacherRecord }>(createApiClient().teacher.records({ id: row.original.id }).get());
           setReviewRecord(data.record);
           setReviewComment(data.record.teacher_comment ?? '');
         }}>处理</Button>
       )
     }
-  ], [token]);
+  ], []);
 
   return (
     <PageFrame
@@ -227,18 +225,18 @@ export function TeacherTaskPage() {
           onFormChange={setForm}
           lockedClassIds={task.classes.map((item) => item.id)}
           onRemoveClassRequest={async (targetClasses) => {
-            if (!token || !task) return;
+            if (!task) return;
             const counts = await Promise.all(targetClasses.map(async (targetClass) => {
-              const data = await unwrapResponse<{ count: number }>(createApiClient(token).teacher.tasks({ id: task.id }).classes({ classId: targetClass.id }).recordCount.get());
+              const data = await unwrapResponse<{ count: number }>(createApiClient().teacher.tasks({ id: task.id }).classes({ classId: targetClass.id }).recordCount.get());
               return data.count;
             }));
             setRemoveClassTargets(targetClasses);
             setRemoveClassRecordCount(counts.reduce((sum, count) => sum + count, 0));
           }}
           onSubmit={async () => {
-            if (!token || !task) return;
+            if (!task) return;
             try {
-              await unwrapResponse(createApiClient(token).teacher.tasks({ id: task.id }).put(formToPayload(form)));
+              await unwrapResponse(createApiClient().teacher.tasks({ id: task.id }).put(formToPayload(form)));
               toastSuccess('任务已更新。');
               setFormOpen(false);
               await loadTask();
@@ -261,12 +259,12 @@ export function TeacherTaskPage() {
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setExportOpen(false)}>取消</Button>
               <Button onClick={async () => {
-                if (!token || !task) return;
+                if (!task) return;
                 if (exportClassIds.length === 0) {
                   toastError(new Error('导出班级不可为空。'));
                   return;
                 }
-                const response = await createApiClient(token).teacher.tasks({ id: task.id }).export.post({ class_ids: exportClassIds });
+                const response = await createApiClient().teacher.tasks({ id: task.id }).export.post({ class_ids: exportClassIds });
                 if (response.error) throw new ApiResponseError(response.status, '导出失败。');
                 const url = URL.createObjectURL(new Blob([response.data as string], { type: 'text/csv;charset=utf-8' }));
                 const link = document.createElement('a');
@@ -289,8 +287,8 @@ export function TeacherTaskPage() {
         confirmLabel="删除"
         variant="destructive"
         onConfirm={async () => {
-          if (!token || !task) return;
-          await unwrapResponse(createApiClient(token).teacher.tasks({ id: task.id }).delete());
+          if (!task) return;
+          await unwrapResponse(createApiClient().teacher.tasks({ id: task.id }).delete());
           navigate(basePath, { replace: true });
         }}
       />
@@ -303,9 +301,9 @@ export function TeacherTaskPage() {
         confirmLabel="删除"
         variant="destructive"
         onConfirm={async () => {
-          if (!token || !task || removeClassTargets.length === 0) return;
+          if (!task || removeClassTargets.length === 0) return;
           for (const targetClass of removeClassTargets) {
-            await unwrapResponse(createApiClient(token).teacher.tasks({ id: task.id }).classes({ classId: targetClass.id }).delete());
+            await unwrapResponse(createApiClient().teacher.tasks({ id: task.id }).classes({ classId: targetClass.id }).delete());
           }
           const removedClassIds = new Set(removeClassTargets.map((item) => item.id));
           setForm((current) => current ? {
@@ -332,20 +330,20 @@ export function TeacherTaskPage() {
                 <Field label="评语"><Textarea value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} /></Field>
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button variant="destructive" onClick={async () => {
-                    if (!token || !reviewRecord) return;
-                    await unwrapResponse(createApiClient(token).teacher.records({ id: reviewRecord.id }).delete());
+                    if (!reviewRecord) return;
+                    await unwrapResponse(createApiClient().teacher.records({ id: reviewRecord.id }).delete());
                     setReviewRecord(null);
                     await loadRecords();
                   }}>删除</Button>
                   <Button variant="outline" onClick={async () => {
-                    if (!token || !reviewRecord) return;
-                    await unwrapResponse(createApiClient(token).teacher.records({ id: reviewRecord.id }).review.put({ status: 'rejected', comment: reviewComment }));
+                    if (!reviewRecord) return;
+                    await unwrapResponse(createApiClient().teacher.records({ id: reviewRecord.id }).review.put({ status: 'rejected', comment: reviewComment }));
                     setReviewRecord(null);
                     await loadRecords();
                   }}>驳回</Button>
                   <Button onClick={async () => {
-                    if (!token || !reviewRecord) return;
-                    await unwrapResponse(createApiClient(token).teacher.records({ id: reviewRecord.id }).review.put({ status: 'approved', comment: reviewComment }));
+                    if (!reviewRecord) return;
+                    await unwrapResponse(createApiClient().teacher.records({ id: reviewRecord.id }).review.put({ status: 'approved', comment: reviewComment }));
                     setReviewRecord(null);
                     await loadRecords();
                   }}>通过</Button>

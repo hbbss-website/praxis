@@ -51,7 +51,7 @@ const studentSearchOptions = [
 const defaultStudentSearch: ListSearchState<StudentSearchField> = { field: 'name', query: '' };
 
 export function TeacherStudentsPage() {
-  const { token, signOut } = useSession();
+  const { signOut } = useSession();
   const { captureShiftKey, resetSelectionAnchor, updateSelection } = useShiftMultiSelect();
   const [students, setStudents] = useState<StudentWithClassSummary[]>([]);
   const [classes, setClasses] = useState<ClassSummary[]>([]);
@@ -68,9 +68,8 @@ export function TeacherStudentsPage() {
   const [resetResult, setResetResult] = useState<CredentialsResult | null>(null);
 
   async function loadData() {
-    if (!token) return;
     try {
-      const api = createApiClient(token);
+      const api = createApiClient();
       const [studentsData, statisticsData, classesData] = await Promise.all([
         unwrapResponse<{ students: StudentWithClassSummary[] }>(api.teacher.students.get()),
         unwrapResponse<{ statistics: TeacherStatistics }>(api.teacher.statistics.get()),
@@ -96,9 +95,8 @@ export function TeacherStudentsPage() {
   }
 
   useEffect(() => {
-    if (!token) return;
     void loadData();
-  }, [token]);
+  }, []);
 
   const searchedStudents = useMemo(() => {
     const query = search.query.trim();
@@ -304,10 +302,10 @@ export function TeacherStudentsPage() {
             <SelectClass classes={classes} value={form.class_id} onChange={(class_id) => setForm((current) => ({ ...current, class_id }))} />
             <Button
               onClick={async () => {
-                if (!token || !editing) return;
+                if (!editing) return;
                 try {
                   await unwrapResponse(
-                    createApiClient(token).teacher.students({ id: editing.id }).put({
+                    createApiClient().teacher.students({ id: editing.id }).put({
                       name: form.name.trim(),
                       password: form.password,
                       class_id: form.class_id
@@ -339,12 +337,10 @@ export function TeacherStudentsPage() {
         confirmLabel="重置密码"
         loading={resetLoading}
         onConfirm={async () => {
-          if (!token) return;
-
           try {
             setResetLoading(true);
             const data = await unwrapResponse<CreatedUsersPayload>(
-              createApiClient(token).teacher.students.password.patch({ ids: selectedIds })
+              createApiClient().teacher.students.password.patch({ ids: selectedIds })
             );
             setBatchResetOpen(false);
             setResetResult({ users: data.users, credentialsCsv: data.credentialsCsv });
@@ -364,10 +360,10 @@ export function TeacherStudentsPage() {
   );
 
   async function updateSelectedClass() {
-    if (!token || selectedIds.length === 0) return;
+    if (selectedIds.length === 0) return;
 
     try {
-      await unwrapResponse(createApiClient(token).teacher.students.class.patch({ ids: selectedIds, class_id: batchClassId }));
+      await unwrapResponse(createApiClient().teacher.students.class.patch({ ids: selectedIds, class_id: batchClassId }));
       toastSuccess('班级已更新。');
       await loadData();
     } catch (nextError) {

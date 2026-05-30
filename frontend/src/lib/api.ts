@@ -145,90 +145,123 @@ function createRpcClient(token?: string | null) {
   });
 }
 
-export function createApiClient(token?: string | null) {
-  const client = createRpcClient(token);
+export function createApiClient() {
+  const client = createRpcClient();
+  type AuthLoginJson = Parameters<typeof client.auth.login.$post>[0]['json'];
+  type AuthPasswordJson = Parameters<typeof client.auth.password.$put>[0]['json'];
+  type AuthProfileJson = Parameters<typeof client.auth.profile.$put>[0]['json'];
+  type AdminUsersPostJson = Parameters<typeof client.admin.users.$post>[0]['json'];
+  type AdminUsersDeleteJson = Parameters<typeof client.admin.users.$delete>[0]['json'];
+  type AdminUsersBatchJson = Parameters<typeof client.admin.users.batch.$post>[0]['json'];
+  type AdminUsersPasswordResetJson = Parameters<typeof client.admin.users['password-reset']['$patch']>[0]['json'];
+  type AdminStudentsClassJson = Parameters<typeof client.admin.students.class.$patch>[0]['json'];
+  type AdminClassesPutJson = Parameters<typeof client.admin.classes[':classId']['$put']>[0]['json'];
+  type AdminClassesTeachersPutJson = Parameters<typeof client.admin.classes[':classId']['teachers']['$put']>[0]['json'];
+  type AdminClassesTeachersDeleteJson = Parameters<typeof client.admin.classes[':classId']['teachers']['$delete']>[0]['json'];
+  type AdminClassesStudentsPutJson = Parameters<typeof client.admin.classes[':classId']['students']['$put']>[0]['json'];
+  type AdminClassesStudentsDeleteJson = Parameters<typeof client.admin.classes[':classId']['students']['$delete']>[0]['json'];
+  type AdminClassesPostJson = Parameters<typeof client.admin.classes.$post>[0]['json'];
+  type StudentRecordsPostJson = Parameters<typeof client.students.me.records.$post>[0]['json'];
+  type TeacherTasksPostJson = Parameters<typeof client.teacher.tasks.$post>[0]['json'];
+  type RecordReviewBatchJson = Parameters<typeof client.teacher['record-reviews']['batch']['$post']>[0]['json'];
+  type TeacherStudentsPasswordResetJson = Parameters<typeof client.teacher.students['password-reset']['$patch']>[0]['json'];
+  type TeacherStudentsClassJson = Parameters<typeof client.teacher.students.class.$patch>[0]['json'];
 
-  const adminUserRoute = ({ id }: { id: number }) => ({
-    put: (body?: any) =>
-      wrapRpcResponse(client.admin.users[':id'].$put({
-        param: { id: toPathParam(id) },
-        json: body
-      })),
-    delete: () =>
-      wrapRpcResponse(client.admin.users[':id'].$delete({
-        param: { id: toPathParam(id) }
-      }))
-  });
-
-  const studentRecordRoute = ({ id }: { id: number }) => ({
-    put: (body?: any) =>
-      wrapRpcResponse(client.students.me.records[':id'].$put({
-        param: { id: toPathParam(id) },
-        json: body
-      })),
-    delete: () =>
-      wrapRpcResponse(client.students.me.records[':id'].$delete({
-        param: { id: toPathParam(id) }
-      }))
-  });
-
-  const teacherRecordRoute = ({ id }: { id: number }) => ({
-    get: () =>
-      wrapRpcResponse(client.teacher.records[':id'].$get({
-        param: { id: toPathParam(id) }
-      })),
-    put: (body?: any) =>
-      wrapRpcResponse(client.teacher.records[':id'].$put({
-        param: { id: toPathParam(id) },
-        json: body
-      })),
-    delete: () =>
-      wrapRpcResponse(client.teacher.records[':id'].$delete({
-        param: { id: toPathParam(id) }
-      })),
-    review: {
-      put: (body?: any) =>
-        wrapRpcResponse(client.teacher.records[':id'].review.$put({
+  const adminUserRoute = ({ id }: { id: number }) => {
+    type Body = Parameters<typeof client.admin.users[':id']['$put']>[0]['json'];
+    return {
+      put: (body: Body) =>
+        wrapRpcResponse(client.admin.users[':id'].$put({
           param: { id: toPathParam(id) },
           json: body
-        }))
-    }
-  });
-
-  const teacherTaskRoute = ({ id }: { id: number }) => ({
-    get: () =>
-      wrapRpcResponse(client.teacher.tasks[':id'].$get({
-        param: { id: toPathParam(id) }
-      })),
-    put: (body?: any) =>
-      wrapRpcResponse(client.teacher.tasks[':id'].$put({
-        param: { id: toPathParam(id) },
-        json: body
-      })),
-    delete: () =>
-      wrapRpcResponse(client.teacher.tasks[':id'].$delete({
-        param: { id: toPathParam(id) }
-      })),
-    export: {
-      post: (body?: any) =>
-        wrapRpcResponse(client.teacher.tasks[':id'].export.$post({
-          param: { id: toPathParam(id) },
-          json: body
-        }))
-    },
-    classes: ({ classId }: { classId: number }) => ({
-      delete: () =>
-        wrapRpcResponse(client.teacher.tasks[':id'].classes[':classId'].$delete({
-          param: { id: toPathParam(id), classId: toPathParam(classId) }
         })),
-      recordCount: {
-        get: () =>
-          wrapRpcResponse(client.teacher.tasks[':id'].classes[':classId']['record-count'].$get({
-            param: { id: toPathParam(id), classId: toPathParam(classId) }
+      delete: () =>
+        wrapRpcResponse(client.admin.users[':id'].$delete({
+          param: { id: toPathParam(id) }
+        }))
+    };
+  };
+
+  const studentRecordRoute = ({ id }: { id: number }) => {
+    type Body = Parameters<typeof client.students.me.records[':id']['$put']>[0]['json'];
+    return {
+      put: (body: Body) =>
+        wrapRpcResponse(client.students.me.records[':id'].$put({
+          param: { id: toPathParam(id) },
+          json: body
+        })),
+      delete: () =>
+        wrapRpcResponse(client.students.me.records[':id'].$delete({
+          param: { id: toPathParam(id) }
+        }))
+    };
+  };
+
+  const teacherRecordRoute = ({ id }: { id: number }) => {
+    type Body = Parameters<typeof client.teacher.records[':id']['$put']>[0]['json'];
+    type ReviewBody = Parameters<typeof client.teacher.records[':id']['review']['$put']>[0]['json'];
+    return {
+      get: () =>
+        wrapRpcResponse(client.teacher.records[':id'].$get({
+          param: { id: toPathParam(id) }
+        })),
+      put: (body: Body) =>
+        wrapRpcResponse(client.teacher.records[':id'].$put({
+          param: { id: toPathParam(id) },
+          json: body
+        })),
+      delete: () =>
+        wrapRpcResponse(client.teacher.records[':id'].$delete({
+          param: { id: toPathParam(id) }
+        })),
+      review: {
+        put: (body: ReviewBody) =>
+          wrapRpcResponse(client.teacher.records[':id'].review.$put({
+            param: { id: toPathParam(id) },
+            json: body
           }))
       }
-    })
-  });
+    };
+  };
+
+  const teacherTaskRoute = ({ id }: { id: number }) => {
+    type Body = Parameters<typeof client.teacher.tasks[':id']['$put']>[0]['json'];
+    type ExportBody = Parameters<typeof client.teacher.tasks[':id']['export']['$post']>[0]['json'];
+    return {
+      get: () =>
+        wrapRpcResponse(client.teacher.tasks[':id'].$get({
+          param: { id: toPathParam(id) }
+        })),
+      put: (body: Body) =>
+        wrapRpcResponse(client.teacher.tasks[':id'].$put({
+          param: { id: toPathParam(id) },
+          json: body
+        })),
+      delete: () =>
+        wrapRpcResponse(client.teacher.tasks[':id'].$delete({
+          param: { id: toPathParam(id) }
+        })),
+      export: {
+        post: (body: ExportBody) =>
+          wrapRpcResponse(client.teacher.tasks[':id'].export.$post({
+            param: { id: toPathParam(id) },
+            json: body
+          }))
+      },
+      classes: ({ classId }: { classId: number }) => ({
+        delete: () =>
+          wrapRpcResponse(client.teacher.tasks[':id'].classes[':classId'].$delete({
+            param: { id: toPathParam(id), classId: toPathParam(classId) }
+          })),
+        recordCount: {
+          get: () =>
+            wrapRpcResponse(client.teacher.tasks[':id'].classes[':classId']['record-count'].$get({
+              param: { id: toPathParam(id), classId: toPathParam(classId) }
+            }))
+        }
+      })
+    };
+  };
 
   const studentTaskRoute = ({ id }: { id: number }) => ({
     get: () =>
@@ -237,19 +270,22 @@ export function createApiClient(token?: string | null) {
       }))
   });
 
-  const teacherStudentRoute = ({ id }: { id: number }) => ({
-    put: (body?: any) =>
-      wrapRpcResponse(client.teacher.students[':id'].$put({
-        param: { id: toPathParam(id) },
-        json: body
-      })),
-    records: {
-      get: () =>
-        wrapRpcResponse(client.teacher.students[':id'].records.$get({
-          param: { id: toPathParam(id) }
-        }))
-    }
-  });
+  const teacherStudentRoute = ({ id }: { id: number }) => {
+    type Body = Parameters<typeof client.teacher.students[':id']['$put']>[0]['json'];
+    return {
+      put: (body: Body) =>
+        wrapRpcResponse(client.teacher.students[':id'].$put({
+          param: { id: toPathParam(id) },
+          json: body
+        })),
+      records: {
+        get: () =>
+          wrapRpcResponse(client.teacher.students[':id'].records.$get({
+            param: { id: toPathParam(id) }
+          }))
+      }
+    };
+  };
 
   return {
     config: {
@@ -257,16 +293,19 @@ export function createApiClient(token?: string | null) {
     },
     auth: {
       login: {
-        post: (body?: any) => wrapRpcResponse(client.auth.login.$post({ json: body }))
+        post: (body: AuthLoginJson) => wrapRpcResponse(client.auth.login.$post({ json: body }))
       },
       me: {
         get: () => wrapRpcResponse(client.auth.me.$get())
       },
       password: {
-        put: (body?: any) => wrapRpcResponse(client.auth.password.$put({ json: body }))
+        put: (body: AuthPasswordJson) => wrapRpcResponse(client.auth.password.$put({ json: body }))
       },
       profile: {
-        put: (body?: any) => wrapRpcResponse(client.auth.profile.$put({ json: body }))
+        put: (body: AuthProfileJson) => wrapRpcResponse(client.auth.profile.$put({ json: body }))
+      },
+      logout: {
+        post: () => wrapRpcResponse(client.auth.logout.$post())
       }
     },
     upload: {
@@ -286,10 +325,10 @@ export function createApiClient(token?: string | null) {
               q: query.q
             }
           })),
-        post: (body?: any) => wrapRpcResponse(client.admin.users.$post({ json: body })),
-        delete: (body?: any) => wrapRpcResponse(client.admin.users.$delete({ json: body })),
+        post: (body: AdminUsersPostJson) => wrapRpcResponse(client.admin.users.$post({ json: body })),
+        delete: (body: AdminUsersDeleteJson) => wrapRpcResponse(client.admin.users.$delete({ json: body })),
         batch: {
-          post: (body?: any) => wrapRpcResponse(client.admin.users.batch.$post({ json: body }))
+          post: (body: AdminUsersBatchJson) => wrapRpcResponse(client.admin.users.batch.$post({ json: body }))
         },
         import: {
           post: ({ file }: { file: File }): ApiResult =>
@@ -304,42 +343,42 @@ export function createApiClient(token?: string | null) {
           }
         },
         password: {
-          patch: (body?: any) => wrapRpcResponse(client.admin.users['password-reset'].$patch({ json: body }))
+          patch: (body: AdminUsersPasswordResetJson) => wrapRpcResponse(client.admin.users['password-reset'].$patch({ json: body }))
         }
       }),
       students: {
         class: {
-          patch: (body?: any) => wrapRpcResponse(client.admin.students.class.$patch({ json: body }))
+          patch: (body: AdminStudentsClassJson) => wrapRpcResponse(client.admin.students.class.$patch({ json: body }))
         }
       },
       classes: Object.assign((classId: number | string) => ({
-        put: (body?: any) => wrapRpcResponse(client.admin.classes[':classId'].$put({
+        put: (body: AdminClassesPutJson) => wrapRpcResponse(client.admin.classes[':classId'].$put({
           param: { classId: toPathParam(classId) },
           json: body
         })),
         teachers: {
-          put: (body?: any) => wrapRpcResponse(client.admin.classes[':classId'].teachers.$put({
+          put: (body: AdminClassesTeachersPutJson) => wrapRpcResponse(client.admin.classes[':classId'].teachers.$put({
             param: { classId: toPathParam(classId) },
             json: body
           })),
-          delete: (body?: any) => wrapRpcResponse(client.admin.classes[':classId'].teachers.$delete({
+          delete: (body: AdminClassesTeachersDeleteJson) => wrapRpcResponse(client.admin.classes[':classId'].teachers.$delete({
             param: { classId: toPathParam(classId) },
             json: body
           }))
         },
         students: {
-          put: (body?: any) => wrapRpcResponse(client.admin.classes[':classId'].students.$put({
+          put: (body: AdminClassesStudentsPutJson) => wrapRpcResponse(client.admin.classes[':classId'].students.$put({
             param: { classId: toPathParam(classId) },
             json: body
           })),
-          delete: (body?: any) => wrapRpcResponse(client.admin.classes[':classId'].students.$delete({
+          delete: (body: AdminClassesStudentsDeleteJson) => wrapRpcResponse(client.admin.classes[':classId'].students.$delete({
             param: { classId: toPathParam(classId) },
             json: body
           }))
         }
       }), {
         get: () => wrapRpcResponse(client.admin.classes.$get()),
-        post: (body?: any) => wrapRpcResponse(client.admin.classes.$post({ json: body })),
+        post: (body: AdminClassesPostJson) => wrapRpcResponse(client.admin.classes.$post({ json: body })),
         students: {
           get: ({ query }: { query?: { q?: string; class_id?: string; scope?: 'all' } } = {}) =>
             wrapRpcResponse(client.admin.classes.students.$get({
@@ -378,7 +417,7 @@ export function createApiClient(token?: string | null) {
       }),
       records: Object.assign(studentRecordRoute, {
         get: () => wrapRpcResponse(client.students.me.records.$get()),
-        post: (body?: any) => wrapRpcResponse(client.students.me.records.$post({ json: body }))
+        post: (body: StudentRecordsPostJson) => wrapRpcResponse(client.students.me.records.$post({ json: body }))
       }),
       notifications: {
         get: () => wrapRpcResponse(client.students.me.notifications.$get()),
@@ -390,7 +429,7 @@ export function createApiClient(token?: string | null) {
     teacher: {
       tasks: Object.assign(teacherTaskRoute, {
         get: () => wrapRpcResponse(client.teacher.tasks.$get()),
-        post: (body?: any) => wrapRpcResponse(client.teacher.tasks.$post({ json: body }))
+        post: (body: TeacherTasksPostJson) => wrapRpcResponse(client.teacher.tasks.$post({ json: body }))
       }),
       overview: {
         get: ({ query }: { query?: { class_id?: string } } = {}) =>
@@ -404,7 +443,7 @@ export function createApiClient(token?: string | null) {
         get: ({ query }: { query?: Record<string, string | number | undefined> } = {}) =>
           wrapRpcResponse(query ? client.teacher.records.$get({ query: query as Record<string, string> }) : client.teacher.records.$get({ query: {} })),
         ['batch-review']: {
-          post: (body?: any) => wrapRpcResponse(client.teacher['record-reviews'].batch.$post({ json: body }))
+          post: (body: RecordReviewBatchJson) => wrapRpcResponse(client.teacher['record-reviews'].batch.$post({ json: body }))
         }
       }),
       students: Object.assign(teacherStudentRoute, {
@@ -417,10 +456,10 @@ export function createApiClient(token?: string | null) {
             }
           })),
         password: {
-          patch: (body?: any) => wrapRpcResponse(client.teacher.students['password-reset'].$patch({ json: body }))
+          patch: (body: TeacherStudentsPasswordResetJson) => wrapRpcResponse(client.teacher.students['password-reset'].$patch({ json: body }))
         },
         class: {
-          patch: (body?: any) => wrapRpcResponse(client.teacher.students.class.$patch({ json: body }))
+          patch: (body: TeacherStudentsClassJson) => wrapRpcResponse(client.teacher.students.class.$patch({ json: body }))
         }
       }),
       classes: {
@@ -445,7 +484,7 @@ export async function unwrapResponse<T>(requestPromise: ApiResult): Promise<T> {
   return response.data as T;
 }
 
-export async function login(uid: string, password: string): Promise<{ token: string; user: StoredUser }> {
+export async function login(uid: string, password: string): Promise<{ user: StoredUser }> {
   const api = createApiClient();
   return unwrapResponse(api.auth.login.post({ uid, password }));
 }
@@ -489,13 +528,13 @@ export function validateUploadImageFiles(files: File[], maxSizeBytes = fallbackU
   }
 }
 
-export async function uploadImage(file: File, token: string, maxSizeBytes = fallbackUploadImageMaxSize): Promise<UploadResult> {
+export async function uploadImage(file: File, maxSizeBytes = fallbackUploadImageMaxSize): Promise<UploadResult> {
   validateUploadImageFile(file, maxSizeBytes);
-  const api = createApiClient(token);
+  const api = createApiClient();
   return unwrapResponse(api.upload.post({ image: file }));
 }
 
-export async function importUserCsv(file: File, token: string): Promise<CreatedUsersPayload & { encoding: CsvImportPreview['encoding'] }> {
-  const api = createApiClient(token);
+export async function importUserCsv(file: File): Promise<CreatedUsersPayload & { encoding: CsvImportPreview['encoding'] }> {
+  const api = createApiClient();
   return unwrapResponse(api.admin.users.import.post({ file }));
 }

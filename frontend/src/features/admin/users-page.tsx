@@ -40,7 +40,7 @@ import { UserCredentialsResult } from '@/shared/user-credentials-result';
 import { AdminPageFrame, Field, SelectClass, type CredentialsResult } from './shared';
 
 export function AdminUsersPage() {
-  const { token, signOut } = useSession();
+  const { signOut } = useSession();
   const csvInputRef = useRef<HTMLInputElement | null>(null);
   const [classes, setClasses] = useState<ClassSummary[]>([]);
   const [singleForm, setSingleForm] = useState({ name: '', role: 'student' as UserRole, class_id: null as number | null });
@@ -53,9 +53,7 @@ export function AdminUsersPage() {
   const [batchResult, setBatchResult] = useState<CredentialsResult | null>(null);
 
   useEffect(() => {
-    if (!token) return;
-
-    unwrapResponse<{ classes: ClassSummary[] }>(createApiClient(token).admin.classes.get())
+    unwrapResponse<{ classes: ClassSummary[] }>(createApiClient().admin.classes.get())
       .then((data) => setClasses(data.classes))
       .catch((error) => {
         if (error instanceof ApiResponseError && error.status === 401) {
@@ -65,7 +63,7 @@ export function AdminUsersPage() {
 
         toastError(error, '加载班级列表失败。');
       });
-  }, [signOut, token]);
+  }, [signOut]);
 
   return (
     <AdminPageFrame title="用户创建" description="管理员可以单个创建、批量填写或导入 CSV 创建账号，并下载生成结果。">
@@ -97,10 +95,8 @@ export function AdminUsersPage() {
               <div className="flex gap-3">
                 <Button
                   onClick={async () => {
-                    if (!token) return;
-
                     try {
-                      const data = await unwrapResponse<CreatedUserPayload>(createApiClient(token).admin.users.post(singleForm));
+                      const data = await unwrapResponse<CreatedUserPayload>(createApiClient().admin.users.post(singleForm));
                       setSingleResult({ users: [data.user], credentialsCsv: data.credentialsCsv });
                       toastSuccess('账号创建成功。');
                     } catch (error) {
@@ -139,9 +135,7 @@ export function AdminUsersPage() {
                 className="hidden"
                 type="file"
                 accept=".csv,text/csv"
-                onChange={async (event) => {
-                  if (!token) return;
-
+                  onChange={async (event) => {
                   const file = event.target.files?.[0];
                   if (!file) return;
 
@@ -163,7 +157,7 @@ export function AdminUsersPage() {
 
                   try {
                     setCsvImporting(true);
-                    const data = await importUserCsv(file, token);
+                    const data = await importUserCsv(file);
                     setCsvResult({ users: data.users, credentialsCsv: data.credentialsCsv });
                     setCsvFileName(file.name);
                     setCsvEncoding(data.encoding);
@@ -269,8 +263,6 @@ export function AdminUsersPage() {
                 </Button>
                 <Button
                   onClick={async () => {
-                    if (!token) return;
-
                     const entries = batchEntries.filter((entry) => entry.name.trim());
                     if (entries.length === 0) {
                       toastError(new Error('请至少填写一条有效记录。'));
@@ -278,7 +270,7 @@ export function AdminUsersPage() {
                     }
 
                     try {
-                      const data = await unwrapResponse<CreatedUsersPayload>(createApiClient(token).admin.users.batch.post({ entries }));
+                      const data = await unwrapResponse<CreatedUsersPayload>(createApiClient().admin.users.batch.post({ entries }));
                       setBatchResult({ users: data.users, credentialsCsv: data.credentialsCsv });
                       toastSuccess(`成功创建 ${data.users.length} 个账号。`);
                     } catch (error) {

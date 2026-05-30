@@ -93,7 +93,7 @@ export function LoginPage() {
 
                 try {
                   const data = await login(uid.trim(), password);
-                  signIn(data.token, data.user, data.user.password_setup_required ? password : null);
+                  signIn(data.user, data.user.password_setup_required ? password : null);
 
                   if (data.user.password_setup_required) {
                     toast('请先设置密码。');

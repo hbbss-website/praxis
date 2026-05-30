@@ -16,7 +16,7 @@ import {
   validatePassword,
   validationHook
 } from '../http';
-import { authMiddleware, signAccessToken, type AppBindings } from '../plugins/auth';
+import { authMiddleware, signAccessToken, setAuthCookie, clearAuthCookie, type AppBindings } from '../plugins/auth';
 
 const dummyPasswordHash = await hashPassword('not-the-real-password');
 
@@ -109,8 +109,10 @@ export const authRoutes = new Hono<AppBindings>()
       password_setup_required: passwordSetupRequired
     };
 
+    const token = await signAccessToken(authUser);
+    setAuthCookie(c, token);
     return c.json({
-      token: await signAccessToken(authUser),
+      token,
       user: authUser
     });
   })
@@ -156,10 +158,12 @@ export const authRoutes = new Hono<AppBindings>()
       ...currentUser,
       password_setup_required: false
     };
+    const token = await signAccessToken(authUser);
+    setAuthCookie(c, token);
 
     return c.json({
       message: '密码修改成功。',
-      token: await signAccessToken(authUser),
+      token,
       user: authUser
     });
   })
@@ -197,4 +201,8 @@ export const authRoutes = new Hono<AppBindings>()
 
     database.updateUserName(userRecord.id, body.name.trim());
     return c.json({ message: '姓名修改成功。' });
+  })
+  .post('/logout', (c) => {
+    clearAuthCookie(c);
+    return c.json({ message: '已退出登录。' });
   });

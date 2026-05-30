@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { parse, stringify } from 'smol-toml';
+import { parse } from 'smol-toml';
 
 export interface AppConfig {
   port: number;
@@ -21,6 +21,23 @@ export interface AppConfig {
   trust_proxy: boolean;
   is_production: boolean;
   cors_origins: string[];
+  record_max_images: number;
+  max_daily_records: number;
+  generated_password_length: number;
+  initial_admin_password: string;
+  upload_webp_quality: number;
+  upload_max_image_dimension: number;
+  upload_webp_effort: number;
+  csv_import_max_size_bytes: number;
+  user_name_max_length: number;
+  title_max_length: number;
+  content_max_length: number;
+  comment_max_length: number;
+  password_min_length: number;
+  password_max_length: number;
+  uid_max_length: number;
+  location_max_length: number;
+  max_record_duration: number;
 }
 
 declare global {
@@ -50,16 +67,30 @@ function createDefaultConfig(): AppConfig {
     timezone: 'UTC+8',
     trust_proxy: false,
     is_production: false,
-    cors_origins: []
+    cors_origins: [],
+    record_max_images: 9,
+    max_daily_records: 50,
+    generated_password_length: 8,
+    initial_admin_password: '12345678',
+    upload_webp_quality: 76,
+    upload_max_image_dimension: 1920,
+    upload_webp_effort: 5,
+    csv_import_max_size_bytes: 50 * 1024 * 1024,
+    user_name_max_length: 40,
+    title_max_length: 120,
+    content_max_length: 5000,
+    comment_max_length: 500,
+    password_min_length: 8,
+    password_max_length: 32,
+    uid_max_length: 32,
+    location_max_length: 120,
+    max_record_duration: 24
   };
 }
 
 function loadRawConfig() {
   if (!fs.existsSync(configFilePath)) {
-    const defaultConfig = createDefaultConfig();
-    fs.writeFileSync(configFilePath, stringify(defaultConfig));
-    console.log('config.toml 不存在，已自动生成');
-    return defaultConfig;
+    return {};
   }
 
   return parse(fs.readFileSync(configFilePath, 'utf8'));
@@ -105,7 +136,24 @@ function normalizeConfig(source: unknown): AppConfig {
     timezone: getString(config, 'timezone', fallback.timezone),
     trust_proxy: getBoolean(config, 'trust_proxy', fallback.trust_proxy),
     is_production: getBoolean(config, 'is_production', fallback.is_production),
-    cors_origins: getStringArray(config, 'cors_origins')
+    cors_origins: getStringArray(config, 'cors_origins'),
+    record_max_images: getPositiveInteger(config, 'record_max_images', fallback.record_max_images),
+    max_daily_records: getPositiveInteger(config, 'max_daily_records', fallback.max_daily_records),
+    generated_password_length: getPositiveInteger(config, 'generated_password_length', fallback.generated_password_length),
+    initial_admin_password: getString(config, 'initial_admin_password', fallback.initial_admin_password),
+    upload_webp_quality: getPositiveInteger(config, 'upload_webp_quality', fallback.upload_webp_quality),
+    upload_max_image_dimension: getPositiveInteger(config, 'upload_max_image_dimension', fallback.upload_max_image_dimension),
+    upload_webp_effort: getPositiveInteger(config, 'upload_webp_effort', fallback.upload_webp_effort),
+    csv_import_max_size_bytes: getPositiveInteger(config, 'csv_import_max_size_bytes', fallback.csv_import_max_size_bytes),
+    user_name_max_length: getPositiveInteger(config, 'user_name_max_length', fallback.user_name_max_length),
+    title_max_length: getPositiveInteger(config, 'title_max_length', fallback.title_max_length),
+    content_max_length: getPositiveInteger(config, 'content_max_length', fallback.content_max_length),
+    comment_max_length: getPositiveInteger(config, 'comment_max_length', fallback.comment_max_length),
+    password_min_length: getPositiveInteger(config, 'password_min_length', fallback.password_min_length),
+    password_max_length: getPositiveInteger(config, 'password_max_length', fallback.password_max_length),
+    uid_max_length: getPositiveInteger(config, 'uid_max_length', fallback.uid_max_length),
+    location_max_length: getPositiveInteger(config, 'location_max_length', fallback.location_max_length),
+    max_record_duration: getPositiveInteger(config, 'max_record_duration', fallback.max_record_duration)
   };
 }
 

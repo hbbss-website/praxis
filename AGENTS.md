@@ -1,8 +1,8 @@
 # 默认提示词
 
-本项目采用 Node.js + pnpm 开发，各种操作的命令参见 `package.json`。如果你修改了后端或数据库结构，请跑一遍 `test:all`；如果需要，请同步修改配置文件。
+本项目采用 Node.js + pnpm 开发，各种操作的命令参见 `package.json`。如果你修改了代码，请跑一遍 `test:all`。
 
-安装 npm 包时请申请权限，否则无法访问网络。
+当 README 和代码不符时，记得修改 README，尤其是在修改了 config 后。如果 README 不存在错误，不要擅自改它。
 
 ## 前端
 

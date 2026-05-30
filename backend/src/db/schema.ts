@@ -121,6 +121,13 @@ export const notifications = sqliteTable('notifications', {
   index('notifications_created_at_idx').on(table.createdAt)
 ]);
 
+export const loginAttempts = sqliteTable('login_attempts', {
+  key: text('key').primaryKey(),
+  count: integer('count').notNull().default(0),
+  lastAttemptAt: integer('last_attempt_at').notNull(),
+  lockedUntil: integer('locked_until')
+});
+
 export const tempUploadDeletions = sqliteTable('temp_upload_deletions', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   filePath: text('file_path').notNull(),

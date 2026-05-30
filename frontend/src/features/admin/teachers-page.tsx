@@ -60,7 +60,7 @@ function UserListPage({
   title: string;
   description: string;
 }) {
-  const { token, signOut } = useSession();
+  const { signOut } = useSession();
   const { captureShiftKey, resetSelectionAnchor, updateSelection } = useShiftMultiSelect();
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [classes, setClasses] = useState<ClassSummary[]>([]);
@@ -79,10 +79,8 @@ function UserListPage({
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   async function loadUsers() {
-    if (!token) return;
-
     try {
-      const api = createApiClient(token);
+      const api = createApiClient();
       const [usersData, classData] = await Promise.all([
         unwrapResponse<{ users: UserSummary[] }>(api.admin.users.get({ query: { role } })),
         role === 'teacher'
@@ -106,7 +104,7 @@ function UserListPage({
 
   useEffect(() => {
     void loadUsers();
-  }, [role, token]);
+  }, [role]);
 
   const searchedUsers = useMemo(() => {
     const query = search.query.trim();
@@ -295,10 +293,10 @@ function UserListPage({
             </Field>
             <Button
               onClick={async () => {
-                if (!token || !editing) return;
+                if (!editing) return;
 
                 try {
-                  await unwrapResponse(createApiClient(token).admin.users({ id: editing.id }).put({
+                  await unwrapResponse(createApiClient().admin.users({ id: editing.id }).put({
                     name: form.name.trim(),
                     password: form.password
                   }));
@@ -329,12 +327,10 @@ function UserListPage({
         confirmLabel="重置密码"
         loading={resetLoading}
         onConfirm={async () => {
-          if (!token) return;
-
           try {
             setResetLoading(true);
             const data = await unwrapResponse<CreatedUsersPayload>(
-              createApiClient(token).admin.users.password.patch({ ids: selectedIds })
+              createApiClient().admin.users.password.patch({ ids: selectedIds })
             );
             setBatchResetOpen(false);
             setResetResult({ users: data.users, credentialsCsv: data.credentialsCsv });
@@ -365,11 +361,11 @@ function UserListPage({
         loading={deleteLoading}
         variant="destructive"
         onConfirm={async () => {
-          if (!token || !deleteTarget) return;
+          if (!deleteTarget) return;
 
           try {
             setDeleteLoading(true);
-            await unwrapResponse(createApiClient(token).admin.users({ id: deleteTarget.id }).delete());
+            await unwrapResponse(createApiClient().admin.users({ id: deleteTarget.id }).delete());
             setDeleteTarget(null);
             toastSuccess('账号已删除。');
             await loadUsers();
@@ -395,11 +391,9 @@ function UserListPage({
         loading={deleteLoading}
         variant="destructive"
         onConfirm={async () => {
-          if (!token) return;
-
           try {
             setDeleteLoading(true);
-            await unwrapResponse(createApiClient(token).admin.users.delete({ ids: selectedIds }));
+            await unwrapResponse(createApiClient().admin.users.delete({ ids: selectedIds }));
             setBatchDeleteOpen(false);
             toastSuccess(`已删除 ${selectedIds.length} 个教师账号。`);
             await loadUsers();

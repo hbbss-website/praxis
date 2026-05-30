@@ -56,22 +56,22 @@ function RootRedirect() {
 }
 
 function RoleLayout({ role }: { role: UserRole }) {
-  const { token, user, signOut, setNotificationCount, notificationCount } = useSession();
+  const { user, signOut, setNotificationCount, notificationCount } = useSession();
   const location = useLocation();
 
   useEffect(() => {
-    if (!token || !user) return;
+    if (!user) return;
     if (user.role !== 'student') return;
     if (user.password_setup_required) return;
 
-    unwrapResponse<{ unreadCount: number; notifications: AppNotification[] }>(createApiClient(token).student.notifications.get())
+    unwrapResponse<{ unreadCount: number; notifications: AppNotification[] }>(createApiClient().student.notifications.get())
       .then((data) => setNotificationCount(data.unreadCount))
       .catch((error) => {
         if (error instanceof ApiResponseError && error.status === 401) signOut();
       });
-  }, [location.pathname, setNotificationCount, signOut, token, user]);
+  }, [location.pathname, setNotificationCount, signOut, user]);
 
-  if (!token || !user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
 
   const allowed = user.role === role || (role === 'teacher' && user.role === 'admin');
   if (!allowed) return <Navigate to={getDefaultPathByRole(user.role, user.password_setup_required)} replace />;

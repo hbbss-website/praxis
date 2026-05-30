@@ -1,14 +1,15 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { clearSession, getPasswordSetupCurrentPassword, getStoredUser, getToken, storeSession } from '@/lib/session';
+import { getPasswordSetupCurrentPassword, clearPasswordSetupCurrentPassword, storePasswordSetupCurrentPassword } from '@/lib/session';
 import type { StoredUser } from '@/lib/types';
+import { createApiClient, unwrapResponse, ApiResponseError } from '@/lib/api';
 
 interface SessionValue {
-  token: string | null;
   user: StoredUser | null;
+  loading: boolean;
   passwordSetupCurrentPassword: string | null;
   notificationCount: number;
-  signIn: (token: string, user: StoredUser, passwordSetupCurrentPassword?: string | null) => void;
+  signIn: (user: StoredUser, passwordSetupCurrentPassword?: string | null) => void;
   signOut: () => void;
   updateUser: (user: StoredUser) => void;
   setNotificationCount: (count: number) => void;
@@ -17,42 +18,65 @@ interface SessionValue {
 const SessionContext = createContext<SessionValue | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => getToken());
-  const [user, setUser] = useState<StoredUser | null>(() => getStoredUser());
-  const [passwordSetupCurrentPassword, setPasswordSetupCurrentPassword] = useState<string | null>(() => getPasswordSetupCurrentPassword());
+  const [user, setUser] = useState<StoredUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [passwordSetupCurrentPassword, setPasswordSetupCurrentPasswordState] = useState<string | null>(() => getPasswordSetupCurrentPassword());
   const [notificationCount, setNotificationCount] = useState(0);
+
+  useEffect(() => {
+    const api = createApiClient();
+    api.auth.me.get()
+      .then(async (response) => {
+        if (response.status === 200 && response.data) {
+          const data = response.data as { user: StoredUser };
+          setUser(data.user);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const signIn = useCallback((nextUser: StoredUser, nextPasswordSetupCurrentPassword?: string | null) => {
+    setUser(nextUser);
+    if (nextPasswordSetupCurrentPassword) {
+      storePasswordSetupCurrentPassword(nextPasswordSetupCurrentPassword);
+      setPasswordSetupCurrentPasswordState(nextPasswordSetupCurrentPassword);
+    } else {
+      clearPasswordSetupCurrentPassword();
+      setPasswordSetupCurrentPasswordState(null);
+    }
+  }, []);
+
+  const signOut = useCallback(async () => {
+    try {
+      await createApiClient().auth.logout.post();
+    } catch {}
+    clearPasswordSetupCurrentPassword();
+    setUser(null);
+    setPasswordSetupCurrentPasswordState(null);
+    setNotificationCount(0);
+  }, []);
+
+  const updateUser = useCallback((nextUser: StoredUser) => {
+    setUser(nextUser);
+    if (!nextUser.password_setup_required) {
+      clearPasswordSetupCurrentPassword();
+      setPasswordSetupCurrentPasswordState(null);
+    }
+  }, []);
 
   const value = useMemo(
     () => ({
-      token,
       user,
+      loading,
       passwordSetupCurrentPassword,
       notificationCount,
-      signIn: (nextToken: string, nextUser: StoredUser, nextPasswordSetupCurrentPassword?: string | null) => {
-        storeSession(nextToken, nextUser, nextPasswordSetupCurrentPassword ?? null);
-        setToken(nextToken);
-        setUser(nextUser);
-        setPasswordSetupCurrentPassword(nextPasswordSetupCurrentPassword ?? null);
-      },
-      signOut: () => {
-        clearSession();
-        setToken(null);
-        setUser(null);
-        setPasswordSetupCurrentPassword(null);
-        setNotificationCount(0);
-      },
-      updateUser: (nextUser: StoredUser) => {
-        if (token) {
-          storeSession(token, nextUser, nextUser.password_setup_required ? passwordSetupCurrentPassword : null);
-        }
-        setUser(nextUser);
-        if (!nextUser.password_setup_required) {
-          setPasswordSetupCurrentPassword(null);
-        }
-      },
+      signIn,
+      signOut,
+      updateUser,
       setNotificationCount
     }),
-    [notificationCount, passwordSetupCurrentPassword, token, user]
+    [user, loading, passwordSetupCurrentPassword, notificationCount, signIn, signOut, updateUser]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

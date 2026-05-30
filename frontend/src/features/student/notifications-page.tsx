@@ -23,20 +23,18 @@ import { MAX_RECORD_IMAGES, type AppNotification, type RecordStatistics, type St
 import { ErrorCard, LoadingCard, StudentPageFrame } from './shared';
 
 export function StudentNotificationsPage() {
-  const { token, signOut, setNotificationCount } = useSession();
+  const { signOut, setNotificationCount } = useSession();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!token) return;
-
-    unwrapResponse<{ notifications: AppNotification[]; unreadCount: number }>(createApiClient(token).student.notifications.get())
+    unwrapResponse<{ notifications: AppNotification[]; unreadCount: number }>(createApiClient().student.notifications.get())
       .then(async (data) => {
         setNotifications(data.notifications);
         setNotificationCount(0);
         if (data.unreadCount > 0) {
-          await unwrapResponse(createApiClient(token).student.notifications.read.post());
+          await unwrapResponse(createApiClient().student.notifications.read.post());
         }
       })
       .catch((nextError) => {
@@ -47,7 +45,7 @@ export function StudentNotificationsPage() {
         setError(nextError instanceof Error ? nextError.message : '加载通知失败。');
       })
       .finally(() => setLoading(false));
-  }, [setNotificationCount, signOut, token]);
+  }, [setNotificationCount, signOut]);
 
   return (
     <StudentPageFrame title="消息通知" description="这里会展示审核通过、驳回、删除以及撤销审核等状态变更。">

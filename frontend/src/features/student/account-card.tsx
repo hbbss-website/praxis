@@ -33,7 +33,7 @@ export function AccountCard({
   title: string;
   allowNameChange: boolean;
 }) {
-  const { token, user, signOut } = useSession();
+  const { user, signOut } = useSession();
   const [nameForm, setNameForm] = useState({ name: user?.name ?? '', current_password: '' });
   const [passwordForm, setPasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
   const [submitting, setSubmitting] = useState('');
@@ -69,10 +69,9 @@ export function AccountCard({
                   className="space-y-4"
                   onSubmit={async (event) => {
                     event.preventDefault();
-                    if (!token) return;
                     setSubmitting('name');
                     try {
-                      await unwrapResponse(createApiClient(token).auth.profile.put(nameForm));
+                      await unwrapResponse(createApiClient().auth.profile.put(nameForm));
                       toastSuccess('姓名修改成功，重新登录后生效。');
                       setNameForm((current) => ({ ...current, current_password: '' }));
                     } catch (nextError) {
@@ -107,7 +106,6 @@ export function AccountCard({
                 className="space-y-4"
                 onSubmit={async (event) => {
                   event.preventDefault();
-                  if (!token) return;
                   if (passwordForm.new_password !== passwordForm.confirm_password) {
                     toastError(new Error('两次输入的密码不一致。'));
                     return;
@@ -115,7 +113,7 @@ export function AccountCard({
                   setSubmitting('password');
                   try {
                     await unwrapResponse(
-                      createApiClient(token).auth.password.put({
+                      createApiClient().auth.password.put({
                         current_password: passwordForm.current_password,
                         new_password: passwordForm.new_password
                       })

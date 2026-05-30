@@ -1,10 +1,12 @@
 import { createMiddleware } from 'hono/factory';
+import { setCookie, getCookie } from 'hono/cookie';
 import { SignJWT, jwtVerify } from 'jose';
 
 import { jwtIssuer, jwtSecret, tokenLifetimeSeconds } from '../auth/config';
 import { isLowCostPasswordHash } from '../auth/password';
 import database from '../database';
 import type { AuthTokenPayload, PublicUser, UserRole } from '../models';
+import { appConfig } from '../config';
 
 export interface AppBindings {
   Variables: {
@@ -17,6 +19,8 @@ const jwtKey = new TextEncoder().encode(jwtSecret);
 type TokenAudience = UserRole | 'unauthorized';
 
 const tokenAudiences: TokenAudience[] = ['admin', 'teacher', 'student', 'unauthorized'];
+const cookieName = 'auth_token';
+const isProduction = appConfig.is_production;
 
 function getTokenAudience(user: PublicUser): TokenAudience {
   return user.password_setup_required ? 'unauthorized' : user.role;
@@ -70,8 +74,31 @@ export async function signAccessToken(user: PublicUser) {
     .sign(jwtKey);
 }
 
+export function setAuthCookie(c: Parameters<typeof setCookie>[0], token: string) {
+  setCookie(c, cookieName, token, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: tokenLifetimeSeconds
+  });
+}
+
+export function clearAuthCookie(c: Parameters<typeof setCookie>[0]) {
+  setCookie(c, cookieName, '', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: 0
+  });
+}
+
 export const authMiddleware = createMiddleware<AppBindings>(async (c, next) => {
-  const { token, error } = readBearerToken(c.req.header('authorization'));
+  const headerResult = readBearerToken(c.req.header('authorization'));
+  const cookieTokenValue = getCookie(c, cookieName);
+  const token = headerResult.token ?? cookieTokenValue ?? null;
+  const error = token ? null : (headerResult.error ?? '缺少认证令牌。');
 
   if (!token) {
     c.set('authError', error);

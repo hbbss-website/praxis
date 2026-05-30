@@ -31,18 +31,17 @@ function sortTasks(tab: TaskTab, tasks: PracticeTaskSummary[]) {
 }
 
 export function StudentDashboardPage() {
-  const { token, signOut } = useSession();
+  const { signOut } = useSession();
   const [tasks, setTasks] = useState<PracticeTaskSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   async function load() {
-    if (!token) return;
     setLoading(true);
     setError('');
 
     try {
-      const data = await unwrapResponse<{ tasks: PracticeTaskSummary[] }>(createApiClient(token).student.tasks.get());
+      const data = await unwrapResponse<{ tasks: PracticeTaskSummary[] }>(createApiClient().student.tasks.get());
       setTasks(data.tasks);
     } catch (nextError) {
       if (nextError instanceof ApiResponseError && nextError.status === 401) {
@@ -57,7 +56,7 @@ export function StudentDashboardPage() {
 
   useEffect(() => {
     void load();
-  }, [token]);
+  }, []);
 
   const grouped = useMemo(() => ({
     active: sortTasks('active', tasks.filter((task) => getTaskTab(task) === 'active')),

@@ -35,7 +35,7 @@ function sortTasks(tab: TaskTab, tasks: PracticeTaskSummary[]) {
 }
 
 export function TeacherTasksPage() {
-  const { token, signOut, user } = useSession();
+  const { signOut, user } = useSession();
   const navigate = useNavigate();
   const basePath = user?.role === 'admin' ? '/admin/tasks' : '/teacher/tasks';
   const [tasks, setTasks] = useState<PracticeTaskSummary[]>([]);
@@ -50,12 +50,11 @@ export function TeacherTasksPage() {
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm);
 
   async function load() {
-    if (!token) return;
     setLoading(true);
     setError('');
 
     try {
-      const api = createApiClient(token);
+      const api = createApiClient();
       const [taskData, classData] = await Promise.all([
         unwrapResponse<{ tasks: PracticeTaskSummary[] }>(api.teacher.tasks.get()),
         unwrapResponse<{ classes: ClassSummary[] }>(api.teacher.classes.get())
@@ -75,7 +74,7 @@ export function TeacherTasksPage() {
 
   useEffect(() => {
     void load();
-  }, [token]);
+  }, []);
 
   const grouped = useMemo(() => ({
     active: sortTasks('active', tasks.filter((task) => getTaskTab(task) === 'active')),
@@ -84,9 +83,8 @@ export function TeacherTasksPage() {
   }), [tasks]);
 
   async function openEdit(taskId: number) {
-    if (!token) return;
     try {
-      const data = await unwrapResponse<{ task: PracticeTaskDetail }>(createApiClient(token).teacher.tasks({ id: taskId }).get());
+      const data = await unwrapResponse<{ task: PracticeTaskDetail }>(createApiClient().teacher.tasks({ id: taskId }).get());
       setEditingTask(data.task);
       setForm(taskToForm(data.task));
       setFormOpen(true);
@@ -136,21 +134,20 @@ export function TeacherTasksPage() {
         onFormChange={setForm}
         lockedClassIds={editingTask?.classes.map((item) => item.id)}
         onRemoveClassRequest={async (targetClasses) => {
-          if (!token || !editingTask) return;
+          if (!editingTask) return;
           const counts = await Promise.all(targetClasses.map(async (targetClass) => {
-            const data = await unwrapResponse<{ count: number }>(createApiClient(token).teacher.tasks({ id: editingTask.id }).classes({ classId: targetClass.id }).recordCount.get());
+            const data = await unwrapResponse<{ count: number }>(createApiClient().teacher.tasks({ id: editingTask.id }).classes({ classId: targetClass.id }).recordCount.get());
             return data.count;
           }));
           setRemoveClassTargets(targetClasses);
           setRemoveClassRecordCount(counts.reduce((sum, count) => sum + count, 0));
         }}
         onSubmit={async () => {
-          if (!token) return;
           try {
             if (editingTask) {
-              await unwrapResponse(createApiClient(token).teacher.tasks({ id: editingTask.id }).put(formToPayload(form)));
+              await unwrapResponse(createApiClient().teacher.tasks({ id: editingTask.id }).put(formToPayload(form)));
             } else {
-              await unwrapResponse(createApiClient(token).teacher.tasks.post(formToPayload(form)));
+              await unwrapResponse(createApiClient().teacher.tasks.post(formToPayload(form)));
             }
             toastSuccess(editingTask ? '任务已更新。' : '任务已创建。');
             setFormOpen(false);
@@ -173,8 +170,8 @@ export function TeacherTasksPage() {
         confirmLabel="删除"
         variant="destructive"
         onConfirm={async () => {
-          if (!token || !deleteTarget) return;
-          await unwrapResponse(createApiClient(token).teacher.tasks({ id: deleteTarget.id }).delete());
+          if (!deleteTarget) return;
+          await unwrapResponse(createApiClient().teacher.tasks({ id: deleteTarget.id }).delete());
           setDeleteTarget(null);
           await load();
         }}
@@ -188,9 +185,9 @@ export function TeacherTasksPage() {
         confirmLabel="删除"
         variant="destructive"
         onConfirm={async () => {
-          if (!token || !editingTask || removeClassTargets.length === 0) return;
+          if (!editingTask || removeClassTargets.length === 0) return;
           for (const targetClass of removeClassTargets) {
-            await unwrapResponse(createApiClient(token).teacher.tasks({ id: editingTask.id }).classes({ classId: targetClass.id }).delete());
+            await unwrapResponse(createApiClient().teacher.tasks({ id: editingTask.id }).classes({ classId: targetClass.id }).delete());
           }
           const removedClassIds = new Set(removeClassTargets.map((item) => item.id));
           setForm((current) => ({

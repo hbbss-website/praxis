@@ -18,7 +18,7 @@ import { ErrorCard, LoadingCard, StatusBadge, StudentPageFrame } from './shared'
 export function StudentTaskPage() {
   const { id } = useParams();
   const taskId = Number(id);
-  const { token, signOut } = useSession();
+  const { signOut } = useSession();
   const navigate = useNavigate();
   const [task, setTask] = useState<PracticeTaskSummary | null>(null);
   const [records, setRecords] = useState<StudentRecord[]>([]);
@@ -28,12 +28,12 @@ export function StudentTaskPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   async function load() {
-    if (!token || !Number.isInteger(taskId)) return;
+    if (!Number.isInteger(taskId)) return;
     setLoading(true);
     setError('');
 
     try {
-      const data = await unwrapResponse<{ task: PracticeTaskSummary; records: StudentRecord[] }>(createApiClient(token).student.tasks({ id: taskId }).get());
+      const data = await unwrapResponse<{ task: PracticeTaskSummary; records: StudentRecord[] }>(createApiClient().student.tasks({ id: taskId }).get());
       setTask(data.task);
       setRecords(data.records);
     } catch (nextError) {
@@ -49,7 +49,7 @@ export function StudentTaskPage() {
 
   useEffect(() => {
     void load();
-  }, [taskId, token]);
+  }, [taskId]);
 
   const now = new Date().toISOString();
   const canAdd = task ? now >= task.start_at && now <= task.end_at && records.length < task.max_records_per_student : false;
@@ -147,10 +147,10 @@ export function StudentTaskPage() {
         loading={deleteLoading}
         variant="destructive"
         onConfirm={async () => {
-          if (!token || !deleteTarget) return;
+          if (!deleteTarget) return;
           try {
             setDeleteLoading(true);
-            await unwrapResponse(createApiClient(token).student.records({ id: deleteTarget.id }).delete());
+            await unwrapResponse(createApiClient().student.records({ id: deleteTarget.id }).delete());
             setDeleteTarget(null);
             toastSuccess('记录已删除。');
             await load();

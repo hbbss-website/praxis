@@ -48,7 +48,7 @@ const classSearchOptions = [
 const defaultClassSearch: ListSearchState<ClassSearchField> = { field: 'name', query: '' };
 
 export function AdminAssignmentsPage() {
-  const { token, signOut } = useSession();
+  const { signOut } = useSession();
   const [classes, setClasses] = useState<ClassSummary[]>([]);
   const [teachers, setTeachers] = useState<UserSummary[]>([]);
   const [students, setStudents] = useState<StudentWithClassSummary[]>([]);
@@ -60,10 +60,8 @@ export function AdminAssignmentsPage() {
   const [editingClassId, setEditingClassId] = useState<number | null>(null);
 
   async function loadData() {
-    if (!token) return;
-
     try {
-      const api = createApiClient(token);
+      const api = createApiClient();
       const [assignmentData, studentData] = await Promise.all([
         unwrapResponse<{ classes: ClassSummary[]; assignments: ClassAssignments; teachers: UserSummary[] }>(api.admin.classes.get()),
         unwrapResponse<{ students: StudentWithClassSummary[] }>(api.admin.classes.students.get({ query: { scope: 'all' } }))
@@ -84,7 +82,7 @@ export function AdminAssignmentsPage() {
 
   useEffect(() => {
     void loadData();
-  }, [token]);
+  }, []);
 
   const teacherMap = useMemo(() => new Map(teachers.map((teacher) => [teacher.id, teacher])), [teachers]);
   const classTeacherMap = useMemo(() => {
@@ -148,18 +146,15 @@ export function AdminAssignmentsPage() {
           <ClassEditorCard
             mode="create"
             teachers={teachers}
-            token={token}
             signOut={signOut}
             onCancel={() => setCreating(false)}
             onSave={async (name, teacherIds, studentIds) => {
-              if (!token) return;
-
-              const data = await unwrapResponse<{ class: ClassSummary }>(createApiClient(token).admin.classes.post({ name }));
+              const data = await unwrapResponse<{ class: ClassSummary }>(createApiClient().admin.classes.post({ name }));
               if (teacherIds.length > 0) {
-                await unwrapResponse(createApiClient(token).admin.classes.assignTeachers({ class_id: data.class.id, teacher_ids: teacherIds }));
+                await unwrapResponse(createApiClient().admin.classes.assignTeachers({ class_id: data.class.id, teacher_ids: teacherIds }));
               }
               if (studentIds.length > 0) {
-                await unwrapResponse(createApiClient(token).admin.classes.assignStudents({ class_id: data.class.id, student_ids: studentIds }));
+                await unwrapResponse(createApiClient().admin.classes.assignStudents({ class_id: data.class.id, student_ids: studentIds }));
               }
               setCreating(false);
               toastSuccess('班级已创建。');
@@ -195,13 +190,10 @@ export function AdminAssignmentsPage() {
                     teachers={teachers}
                     teacherIds={teacherIds}
                     students={classStudents}
-                    token={token}
                     signOut={signOut}
                     onCancel={() => setEditingClassId(null)}
                     onSave={async (name, nextTeacherIds, nextStudentIds) => {
-                      if (!token) return;
-
-                      const api = createApiClient(token);
+                      const api = createApiClient();
                       const currentTeacherSet = new Set(teacherIds);
                       const nextTeacherSet = new Set(nextTeacherIds);
                       const addTeacherIds = nextTeacherIds.filter((id) => !currentTeacherSet.has(id));
@@ -316,7 +308,6 @@ function ClassEditorCard({
   teachers,
   teacherIds = [],
   students = [],
-  token,
   signOut,
   onCancel,
   onSave
@@ -326,7 +317,6 @@ function ClassEditorCard({
   teachers: UserSummary[];
   teacherIds?: number[];
   students?: StudentWithClassSummary[];
-  token: string | null;
   signOut: () => void;
   onCancel: () => void;
   onSave: (name: string, teacherIds: number[], studentIds: number[]) => Promise<void>;
@@ -364,7 +354,7 @@ function ClassEditorCard({
           <Input value={name} onChange={(event) => setName(event.target.value)} />
         </Field>
         <TeacherMultiSelect teachers={teachers} value={selectedTeacherIds} onChange={setSelectedTeacherIds} />
-        <ClassStudentMultiSelect classId={classItem?.id ?? null} token={token} signOut={signOut} initialStudents={students} value={selectedStudentIds} onChange={setSelectedStudentIds} />
+        <ClassStudentMultiSelect classId={classItem?.id ?? null} signOut={signOut} initialStudents={students} value={selectedStudentIds} onChange={setSelectedStudentIds} />
       </div>
       <div className="flex flex-wrap gap-2">
         <Button disabled={saving} onClick={() => void save()}>
@@ -488,14 +478,12 @@ function TeacherMultiSelect({
 
 function ClassStudentMultiSelect({
   classId,
-  token,
   signOut,
   initialStudents,
   value,
   onChange
 }: {
   classId: number | null;
-  token: string | null;
   signOut: () => void;
   initialStudents: StudentWithClassSummary[];
   value: number[];
@@ -518,11 +506,10 @@ function ClassStudentMultiSelect({
     let cancelled = false;
 
     async function loadMatchedStudents() {
-      if (!token) return;
       setLoading(true);
       try {
         const data = await unwrapResponse<{ students: StudentWithClassSummary[] }>(
-          createApiClient(token).admin.classes.students.get({
+          createApiClient().admin.classes.students.get({
             query: {
               q: debouncedQuery.trim() || undefined,
               class_id: classId ? String(classId) : undefined
@@ -552,7 +539,7 @@ function ClassStudentMultiSelect({
     return () => {
       cancelled = true;
     };
-  }, [classId, debouncedQuery, signOut, token]);
+  }, [classId, debouncedQuery, signOut]);
 
   useEffect(() => {
     setVisibleCount(comboboxPageSize);
@@ -626,12 +613,10 @@ function ClassStudentMultiSelect({
 }
 
 function AssignmentStudentFilter({
-  token,
   signOut,
   value,
   onChange
 }: {
-  token: string | null;
   signOut: () => void;
   value: number[];
   onChange: (value: number[], selectedStudents: StudentWithClassSummary[]) => void;
@@ -668,11 +653,10 @@ function AssignmentStudentFilter({
     let cancelled = false;
 
     async function loadMatchedStudents() {
-      if (!token) return;
       setLoading(true);
       try {
         const data = await unwrapResponse<{ students: StudentWithClassSummary[] }>(
-          createApiClient(token).admin.classes.students.get({ query: { q: debouncedQuery.trim() || undefined } })
+          createApiClient().admin.classes.students.get({ query: { q: debouncedQuery.trim() || undefined } })
         );
 
         if (cancelled) return;
@@ -697,7 +681,7 @@ function AssignmentStudentFilter({
     return () => {
       cancelled = true;
     };
-  }, [debouncedQuery, signOut, token]);
+  }, [debouncedQuery, signOut]);
 
   useEffect(() => {
     setVisibleCount(comboboxPageSize);

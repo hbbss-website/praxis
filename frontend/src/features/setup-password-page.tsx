@@ -23,7 +23,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export function SetupPasswordPage() {
   const navigate = useNavigate();
-  const { token, user, passwordSetupCurrentPassword, signIn, signOut } = useSession();
+  const { user, passwordSetupCurrentPassword, signIn, signOut } = useSession();
   const [form, setForm] = useState({
     new_password: '',
     confirm_password: ''
@@ -39,7 +39,7 @@ export function SetupPasswordPage() {
     navigate('/login', { replace: true });
   }, [navigate, passwordSetupCurrentPassword, signOut, user?.password_setup_required]);
 
-  if (!token || !user) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
@@ -99,12 +99,12 @@ export function SetupPasswordPage() {
 
               try {
                 const data = await unwrapResponse<{ token: string; user: typeof user }>(
-                  createApiClient(token).auth.password.put({
+                  createApiClient().auth.password.put({
                     current_password: passwordSetupCurrentPassword,
                     new_password: form.new_password
                   })
                 );
-                signIn(data.token, data.user, null);
+                signIn(data.user, null);
                 toastSuccess('密码设置成功。');
                 navigate(getDefaultPathByRole(user.role), { replace: true });
               } catch (nextError) {

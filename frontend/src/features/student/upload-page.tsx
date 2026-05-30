@@ -18,7 +18,7 @@ import { createLocalImageItem, type UploadImageItem } from './upload-types';
 import { ErrorCard, Field, LoadingCard, StudentPageFrame } from './shared';
 
 export function StudentUploadPage() {
-  const { token, signOut } = useSession();
+  const { signOut } = useSession();
   const navigate = useNavigate();
   const { taskId: taskIdParam } = useParams();
   const taskId = Number(taskIdParam);
@@ -47,9 +47,9 @@ export function StudentUploadPage() {
   }, []);
 
   useEffect(() => {
-    if (!token || !Number.isInteger(taskId) || taskId <= 0) return;
-
-    unwrapResponse<{ task: PracticeTaskSummary; records: StudentRecord[] }>(createApiClient(token).student.tasks({ id: taskId }).get())
+    if (!Number.isInteger(taskId) || taskId <= 0) return;
+ 
+    unwrapResponse<{ task: PracticeTaskSummary; records: StudentRecord[] }>(createApiClient().student.tasks({ id: taskId }).get())
       .then((data) => {
         setTask(data.task);
         if (editId) {
@@ -83,7 +83,7 @@ export function StudentUploadPage() {
         setError(nextError instanceof Error ? nextError.message : '加载任务失败。');
       })
       .finally(() => setLoading(false));
-  }, [editId, navigate, signOut, taskId, token]);
+  }, [editId, navigate, signOut, taskId]);
 
   useEffect(() => () => {
     for (const previewUrl of localPreviewUrls.current) {
@@ -114,7 +114,6 @@ export function StudentUploadPage() {
               className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]"
               onSubmit={async (event) => {
                 event.preventDefault();
-                if (!token) return;
                 setError('');
                 setSubmitting(true);
 
@@ -140,7 +139,7 @@ export function StudentUploadPage() {
                       };
                     }
 
-                    const uploadResult = await uploadImage(image.file!, token, uploadImageMaxSizeBytes);
+                    const uploadResult = await uploadImage(image.file!, uploadImageMaxSizeBytes);
                     return {
                       id: image.id,
                       path: uploadResult.imageUrl
@@ -149,7 +148,7 @@ export function StudentUploadPage() {
                   const imagePaths = uploadedImages.map((image) => image.path);
                   const coverImagePath = uploadedImages.find((image) => image.id === coverImageId)?.path ?? imagePaths[0] ?? null;
 
-                  const api = createApiClient(token);
+                  const api = createApiClient();
                   const payload = {
                     ...form,
                     task_id: task.id,
