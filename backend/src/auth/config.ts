@@ -1,4 +1,6 @@
-import { appConfig } from '../config';
+import { appConfig, ensurePersistedJwtSecret } from '../config';
+
+ensurePersistedJwtSecret();
 
 function parseDurationSeconds(value: string | undefined, fallback: number) {
   if (!value) {
