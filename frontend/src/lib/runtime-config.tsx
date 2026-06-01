@@ -6,7 +6,9 @@ import type { AppRuntimeConfig } from './types';
 const defaultRuntimeConfig: AppRuntimeConfig = {
   site_name: 'Praxis',
   upload_image_max_size_bytes: 5 * 1024 * 1024,
-  timezone: 'UTC+8'
+  timezone: 'UTC+8',
+  password_min_length: 8,
+  password_max_length: 32
 };
 
 const RuntimeConfigContext = createContext(defaultRuntimeConfig);

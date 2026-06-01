@@ -79,7 +79,9 @@ export const api = new Hono<AppBindings>()
   .get('/config', (c) => c.json({
     site_name: appConfig.site_name,
     upload_image_max_size_bytes: appConfig.upload_image_max_size_bytes,
-    timezone: appConfig.timezone
+    timezone: appConfig.timezone,
+    password_min_length: appConfig.password_min_length,
+    password_max_length: appConfig.password_max_length
   }))
   .route('/auth', authRoutes)
   .route('/admin', adminRoutes)

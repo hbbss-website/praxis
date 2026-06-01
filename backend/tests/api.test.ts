@@ -50,6 +50,7 @@ let parseUserImportCsvBuffer: CsvImportModule['parseUserImportCsvBuffer'];
 let parseUserImportCsvText: CsvImportModule['parseUserImportCsvText'];
 let createUserCredentialsCsv: CsvImportModule['createUserCredentialsCsv'];
 let hashPassword: PasswordModule['hashPassword'];
+let digestPasswordForStorage: PasswordModule['digestPasswordForStorage'];
 let isLowCostPasswordHash: PasswordModule['isLowCostPasswordHash'];
 
 beforeAll(async () => {
@@ -70,6 +71,7 @@ beforeAll(async () => {
   parseUserImportCsvText = csvImportModule.parseUserImportCsvText;
   createUserCredentialsCsv = csvImportModule.createUserCredentialsCsv;
   hashPassword = passwordModule.hashPassword;
+  digestPasswordForStorage = passwordModule.digestPasswordForStorage;
   isLowCostPasswordHash = passwordModule.isLowCostPasswordHash;
 
   await database.createUsers([
@@ -128,7 +130,7 @@ async function readJson(response: Response) {
 }
 
 async function loginAs(uid: string, password: string) {
-  const response = await jsonRequest('/api/auth/login', { uid, password }, { method: 'POST' });
+  const response = await jsonRequest('/api/auth/login', { uid, password: digestPasswordForStorage(password) }, { method: 'POST' });
   const payload = await readJson(response);
 
   if (!response.ok) {
@@ -167,7 +169,7 @@ async function setNormalPassword(uid: string, password: string) {
     throw new Error(`user not found: ${uid}`);
   }
 
-  database.updateUserPassword(user.id, await hashPassword(password));
+  database.updateUserPassword(user.id, await hashPassword(digestPasswordForStorage(password)));
 }
 
 function createTempUpload(name: string, content: string) {
@@ -443,7 +445,10 @@ describe('assignments, records and notifications', () => {
 describe('route behavior', () => {
   test('requires users with random initial passwords to set a new password after login', async () => {
     const createdUser = await database.createUser('待设置密码用户', 'student');
-    const response = await jsonRequest('/api/auth/login', { uid: createdUser.uid, password: createdUser.password }, { method: 'POST' });
+    const response = await jsonRequest('/api/auth/login', {
+      uid: createdUser.uid,
+      password: digestPasswordForStorage(createdUser.password)
+    }, { method: 'POST' });
     const payload = await readJson(response);
 
     expect(response.status).toBe(200);
@@ -464,8 +469,8 @@ describe('route behavior', () => {
     expect((await readJson(blockedResponse)).error).toBe('请设置密码。');
 
     const changePasswordResponse = await jsonRequest('/api/auth/password', {
-      current_password: createdUser.password,
-      new_password: 'new-password-01'
+      current_password: digestPasswordForStorage(createdUser.password),
+      new_password: digestPasswordForStorage('new-password-01')
     }, {
       method: 'PUT',
       headers: {
@@ -477,7 +482,10 @@ describe('route behavior', () => {
     const changePasswordPayload = await readJson(changePasswordResponse);
     expect(decodeJwt(changePasswordPayload.token as string).aud).toBe('student');
 
-    const reloginResponse = await jsonRequest('/api/auth/login', { uid: createdUser.uid, password: 'new-password-01' }, { method: 'POST' });
+    const reloginResponse = await jsonRequest('/api/auth/login', {
+      uid: createdUser.uid,
+      password: digestPasswordForStorage('new-password-01')
+    }, { method: 'POST' });
     const reloginPayload = await readJson(reloginResponse);
 
     expect(reloginResponse.status).toBe(200);
@@ -497,12 +505,12 @@ describe('route behavior', () => {
     expect(payload.upload_image_max_size_bytes).toBe(5 * 1024 * 1024);
   });
 
-  test('rejects passwords longer than 32 characters in the backend', async () => {
+  test('rejects passwords that are not sha-256 hex in the backend', async () => {
     await setNormalPassword('T00001', 'teacher-pass-01');
     const token = await loginAs('T00001', 'teacher-pass-01');
     expect(decodeJwt(token).aud).toBe('teacher');
     const response = await jsonRequest('/api/auth/password', {
-      current_password: 'teacher-pass-01',
+      current_password: digestPasswordForStorage('teacher-pass-01'),
       new_password: '123456789012345678901234567890123'
     }, {
       method: 'PUT',
@@ -512,7 +520,7 @@ describe('route behavior', () => {
     });
 
     expect(response.status).toBe(400);
-    expect((await readJson(response)).error).toBe('密码不能超过 32 位。');
+    expect((await readJson(response)).error).toBe('密码格式无效。');
   });
 
   test('rejects non-image content during upload even if the declared type is allowed', async () => {
@@ -945,7 +953,7 @@ describe('route behavior', () => {
     const headers = { 'x-real-ip': '203.0.113.10' };
 
     for (let index = 0; index < 3; index += 1) {
-      const response = await jsonRequest('/api/auth/login', { uid: 'S00001', password: 'wrong-password' }, {
+      const response = await jsonRequest('/api/auth/login', { uid: 'S00001', password: digestPasswordForStorage('wrong-password') }, {
         method: 'POST',
         headers
       });
@@ -953,14 +961,14 @@ describe('route behavior', () => {
       expect(response.status).toBe(401);
     }
 
-    const lockedResponse = await jsonRequest('/api/auth/login', { uid: 'S00001', password: 'student-pass-01' }, {
+    const lockedResponse = await jsonRequest('/api/auth/login', { uid: 'S00001', password: digestPasswordForStorage('student-pass-01') }, {
       method: 'POST',
       headers
     });
 
     expect(lockedResponse.status).toBe(429);
 
-    const otherUserResponse = await jsonRequest('/api/auth/login', { uid: 'S00002', password: 'student-pass-02' }, {
+    const otherUserResponse = await jsonRequest('/api/auth/login', { uid: 'S00002', password: digestPasswordForStorage('student-pass-02') }, {
       method: 'POST',
       headers
     });

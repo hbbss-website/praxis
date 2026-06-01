@@ -3,6 +3,9 @@ import { hc } from 'hono/client';
 import type { Api } from '../../../backend/src/app';
 import { API_URL, MAX_RECORD_IMAGES, type AppRuntimeConfig, type CreatedUser, type CreatedUsersPayload, type CsvImportPreview, type StoredUser, type UploadResult, type UserRole } from './types';
 
+export const fallbackPasswordMinLength = 8;
+export const fallbackPasswordMaxLength = 32;
+
 export class ApiResponseError extends Error {
   status: number;
 
@@ -17,6 +20,7 @@ type ApiResult = Promise<{ data: unknown; error: unknown; status: number }>;
 const fallbackUploadImageMaxSize = 5 * 1024 * 1024;
 const uploadImageTypes = new Set(['image/jpeg', 'image/png', 'image/gif']);
 const uploadImageNamePattern = /\.(jpe?g|png|gif)$/i;
+const textEncoder = new TextEncoder();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -125,6 +129,44 @@ function toPathParam(value: number | string) {
   return String(value);
 }
 
+export function validatePlainPassword(password: string, config?: Pick<AppRuntimeConfig, 'password_min_length' | 'password_max_length'>) {
+  const minLength = config?.password_min_length ?? fallbackPasswordMinLength;
+  const maxLength = config?.password_max_length ?? fallbackPasswordMaxLength;
+
+  if (!password) {
+    return '密码不能为空。';
+  }
+
+  if (password.length < minLength) {
+    return `密码至少需要 ${minLength} 位。`;
+  }
+
+  if (password.length > maxLength) {
+    return `密码不能超过 ${maxLength} 位。`;
+  }
+
+  return null;
+}
+
+export async function hashPasswordForApi(password: string) {
+  const buffer = await crypto.subtle.digest('SHA-256', textEncoder.encode(password));
+  return Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function hashPasswordFields<T extends Record<string, unknown>>(body: T, keys: Array<keyof T>) {
+  const nextBody = { ...body };
+
+  for (const key of keys) {
+    const value = nextBody[key];
+
+    if (typeof value === 'string' && value !== '') {
+      nextBody[key] = await hashPasswordForApi(value) as T[keyof T];
+    }
+  }
+
+  return nextBody;
+}
+
 export function getApiOrigin() {
   const apiBase = API_URL.replace(/\/api$/, '');
 
@@ -171,10 +213,12 @@ export function createApiClient() {
     type Body = Parameters<typeof client.admin.users[':id']['$put']>[0]['json'];
     return {
       put: (body: Body) =>
-        wrapRpcResponse(client.admin.users[':id'].$put({
-          param: { id: toPathParam(id) },
-          json: body
-        })),
+        hashPasswordFields(body, ['password']).then((json) =>
+          wrapRpcResponse(client.admin.users[':id'].$put({
+            param: { id: toPathParam(id) },
+            json
+          }))
+        ),
       delete: () =>
         wrapRpcResponse(client.admin.users[':id'].$delete({
           param: { id: toPathParam(id) }
@@ -274,10 +318,12 @@ export function createApiClient() {
     type Body = Parameters<typeof client.teacher.students[':id']['$put']>[0]['json'];
     return {
       put: (body: Body) =>
-        wrapRpcResponse(client.teacher.students[':id'].$put({
-          param: { id: toPathParam(id) },
-          json: body
-        })),
+        hashPasswordFields(body, ['password']).then((json) =>
+          wrapRpcResponse(client.teacher.students[':id'].$put({
+            param: { id: toPathParam(id) },
+            json
+          }))
+        ),
       records: {
         get: () =>
           wrapRpcResponse(client.teacher.students[':id'].records.$get({
@@ -293,16 +339,20 @@ export function createApiClient() {
     },
     auth: {
       login: {
-        post: (body: AuthLoginJson) => wrapRpcResponse(client.auth.login.$post({ json: body }))
+        post: (body: AuthLoginJson) =>
+          hashPasswordFields(body, ['password']).then((json) => wrapRpcResponse(client.auth.login.$post({ json })))
       },
       me: {
         get: () => wrapRpcResponse(client.auth.me.$get())
       },
       password: {
-        put: (body: AuthPasswordJson) => wrapRpcResponse(client.auth.password.$put({ json: body }))
+        put: (body: AuthPasswordJson) =>
+          hashPasswordFields(body, ['current_password', 'new_password'])
+            .then((json) => wrapRpcResponse(client.auth.password.$put({ json })))
       },
       profile: {
-        put: (body: AuthProfileJson) => wrapRpcResponse(client.auth.profile.$put({ json: body }))
+        put: (body: AuthProfileJson) =>
+          hashPasswordFields(body, ['current_password']).then((json) => wrapRpcResponse(client.auth.profile.$put({ json })))
       },
       logout: {
         post: () => wrapRpcResponse(client.auth.logout.$post())

@@ -13,15 +13,16 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
-import { login } from '@/lib/api';
+import { login, validatePlainPassword } from '@/lib/api';
 import { toastError } from '@/lib/feedback';
 import { getDefaultPathByRole } from '@/lib/session';
 import { useSession } from '@/lib/auth';
-import { useSiteName } from '@/lib/runtime-config';
+import { useRuntimeConfig, useSiteName } from '@/lib/runtime-config';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const { signIn } = useSession();
+  const runtimeConfig = useRuntimeConfig();
   const siteName = useSiteName();
   const [uid, setUid] = useState('');
   const [password, setPassword] = useState('');
@@ -91,6 +92,13 @@ export function LoginPage() {
               className="space-y-5"
               onSubmit={async (event) => {
                 event.preventDefault();
+                const passwordError = validatePlainPassword(password, runtimeConfig);
+
+                if (passwordError) {
+                  toastError(new Error(passwordError));
+                  return;
+                }
+
                 setLoading(true);
 
                 try {

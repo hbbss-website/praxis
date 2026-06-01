@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, test } from 'vitest';
-import { ApiResponseError, formatUploadImageMaxSize, unwrapResponse } from './api';
+import { ApiResponseError, formatUploadImageMaxSize, hashPasswordForApi, unwrapResponse, validatePlainPassword } from './api';
 
 test('ApiResponseError stores status and message', () => {
   const error = new ApiResponseError(404, '未找到');
@@ -28,6 +28,18 @@ describe('formatUploadImageMaxSize', () => {
 
   test('handles 1 byte', () => {
     expect(formatUploadImageMaxSize(1)).toBe('1 B');
+  });
+});
+
+describe('password helpers', () => {
+  test('hashes password as sha-256 hex', async () => {
+    expect(await hashPasswordForApi('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+
+  test('validates plain password length', () => {
+    expect(validatePlainPassword('12345678')).toBeNull();
+    expect(validatePlainPassword('1234567')).toBe('密码至少需要 8 位。');
+    expect(validatePlainPassword('1'.repeat(33))).toBe('密码不能超过 32 位。');
   });
 });
 

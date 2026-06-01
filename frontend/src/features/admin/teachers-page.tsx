@@ -30,9 +30,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSession } from '@/lib/auth';
-import { ApiResponseError, createApiClient, importUserCsv, unwrapResponse } from '@/lib/api';
+import { ApiResponseError, createApiClient, importUserCsv, unwrapResponse, validatePlainPassword } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/feedback';
 import { formatDateTime, formatDuration } from '@/lib/format';
+import { useRuntimeConfig } from '@/lib/runtime-config';
 import { useShiftMultiSelect } from '@/lib/shift-selection';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { ClassAssignments, ClassSummary, CreatedUser, CreatedUserPayload, CreatedUsersPayload, CsvImportEntry, CsvImportPreview, StudentSummary, StudentWithClassSummary, TeacherStatistics, UserRole, UserSummary } from '@/lib/types';
@@ -61,6 +62,7 @@ function UserListPage({
   description: string;
 }) {
   const { signOut } = useSession();
+  const runtimeConfig = useRuntimeConfig();
   const { captureShiftKey, resetSelectionAnchor, updateSelection } = useShiftMultiSelect();
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [classes, setClasses] = useState<ClassSummary[]>([]);
@@ -296,6 +298,13 @@ function UserListPage({
                 if (!editing) return;
 
                 try {
+                  const passwordError = form.password ? validatePlainPassword(form.password, runtimeConfig) : null;
+
+                  if (passwordError) {
+                    toastError(new Error(passwordError));
+                    return;
+                  }
+
                   await unwrapResponse(createApiClient().admin.users({ id: editing.id }).put({
                     name: form.name.trim(),
                     password: form.password

@@ -1,4 +1,4 @@
-import { argon2, argon2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { argon2, argon2Sync, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { availableParallelism } from 'node:os';
 import { promisify } from 'node:util';
 import { Worker } from 'node:worker_threads';
@@ -64,6 +64,10 @@ const hashes = workerData.passwords.map((password) => {
 
 parentPort.postMessage(hashes);
 `;
+
+export function digestPasswordForStorage(password: string) {
+  return createHash('sha256').update(password).digest('hex');
+}
 
 function isHex(value: string) {
   return value.length > 0 && value.length % 2 === 0 && /^[0-9a-f]+$/i.test(value);

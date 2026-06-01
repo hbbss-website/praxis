@@ -7,9 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { ApiResponseError, createApiClient, unwrapResponse } from '@/lib/api';
+import { ApiResponseError, createApiClient, unwrapResponse, validatePlainPassword } from '@/lib/api';
 import { useSession } from '@/lib/auth';
 import { toastError, toastSuccess } from '@/lib/feedback';
+import { useRuntimeConfig } from '@/lib/runtime-config';
 import { getDefaultPathByRole } from '@/lib/session';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -24,6 +25,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function SetupPasswordPage() {
   const navigate = useNavigate();
   const { user, passwordSetupCurrentPassword, signIn, signOut } = useSession();
+  const runtimeConfig = useRuntimeConfig();
   const [form, setForm] = useState({
     new_password: '',
     confirm_password: ''
@@ -92,6 +94,13 @@ export function SetupPasswordPage() {
 
               if (form.new_password !== form.confirm_password) {
                 toastError(new Error('两次输入的密码不一致。'));
+                return;
+              }
+
+              const passwordError = validatePlainPassword(form.new_password, runtimeConfig);
+
+              if (passwordError) {
+                toastError(new Error(passwordError));
                 return;
               }
 

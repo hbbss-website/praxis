@@ -33,9 +33,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import { ApiResponseError, createApiClient, unwrapResponse } from '@/lib/api';
+import { ApiResponseError, createApiClient, unwrapResponse, validatePlainPassword } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/feedback';
 import { formatDate, formatDateTime, formatDuration, normalizeDateInputValue, statusLabel } from '@/lib/format';
+import { useRuntimeConfig } from '@/lib/runtime-config';
 import { useShiftMultiSelect } from '@/lib/shift-selection';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import type { ClassSummary, CreatedUser, CreatedUsersPayload, StudentSummary, StudentWithClassSummary, TeacherRecord, TeacherRecordSummary, TeacherStatistics, UserSummary } from '@/lib/types';
@@ -52,6 +53,7 @@ const defaultStudentSearch: ListSearchState<StudentSearchField> = { field: 'name
 
 export function TeacherStudentsPage() {
   const { signOut } = useSession();
+  const runtimeConfig = useRuntimeConfig();
   const { captureShiftKey, resetSelectionAnchor, updateSelection } = useShiftMultiSelect();
   const [students, setStudents] = useState<StudentWithClassSummary[]>([]);
   const [classes, setClasses] = useState<ClassSummary[]>([]);
@@ -304,6 +306,13 @@ export function TeacherStudentsPage() {
               onClick={async () => {
                 if (!editing) return;
                 try {
+                  const passwordError = form.password ? validatePlainPassword(form.password, runtimeConfig) : null;
+
+                  if (passwordError) {
+                    toastError(new Error(passwordError));
+                    return;
+                  }
+
                   await unwrapResponse(
                     createApiClient().teacher.students({ id: editing.id }).put({
                       name: form.name.trim(),

@@ -16,9 +16,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import { ApiResponseError, createApiClient, formatUploadImageMaxSize, getRuntimeConfig, unwrapResponse, uploadImage, validateUploadImageFiles } from '@/lib/api';
+import { ApiResponseError, createApiClient, formatUploadImageMaxSize, getRuntimeConfig, unwrapResponse, uploadImage, validatePlainPassword, validateUploadImageFiles } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/feedback';
 import { formatDate, formatDateTime, formatDuration, normalizeDateInputValue, notificationLabel, statusLabel } from '@/lib/format';
+import { useRuntimeConfig } from '@/lib/runtime-config';
 import { MAX_RECORD_IMAGES, type AppNotification, type RecordStatistics, type StudentRecord } from '@/lib/types';
 import { Field, StudentPageFrame } from './shared';
 
@@ -34,6 +35,7 @@ export function AccountCard({
   allowNameChange: boolean;
 }) {
   const { user, signOut } = useSession();
+  const runtimeConfig = useRuntimeConfig();
   const [nameForm, setNameForm] = useState({ name: user?.name ?? '', current_password: '' });
   const [passwordForm, setPasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
   const [submitting, setSubmitting] = useState('');
@@ -69,6 +71,13 @@ export function AccountCard({
                   className="space-y-4"
                   onSubmit={async (event) => {
                     event.preventDefault();
+                    const passwordError = validatePlainPassword(nameForm.current_password, runtimeConfig);
+
+                    if (passwordError) {
+                      toastError(new Error(passwordError));
+                      return;
+                    }
+
                     setSubmitting('name');
                     try {
                       await unwrapResponse(createApiClient().auth.profile.put(nameForm));
@@ -110,6 +119,15 @@ export function AccountCard({
                     toastError(new Error('两次输入的密码不一致。'));
                     return;
                   }
+
+                  const currentPasswordError = validatePlainPassword(passwordForm.current_password, runtimeConfig);
+                  const newPasswordError = validatePlainPassword(passwordForm.new_password, runtimeConfig);
+
+                  if (currentPasswordError || newPasswordError) {
+                    toastError(new Error(currentPasswordError ?? newPasswordError ?? '密码无效。'));
+                    return;
+                  }
+
                   setSubmitting('password');
                   try {
                     await unwrapResponse(
