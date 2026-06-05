@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
-import { digestPasswordForStorage, hashPassword, hashPasswordSync, hashPasswords } from '../../auth/password';
+import { hashPassword, hashPasswordSync, hashPasswords } from '../../auth/password';
 import { appConfig } from '../../config';
 import type { CreateUserResult, UserRole, UserSummary } from '../../models';
 import { userRoles } from '../../models';
@@ -69,7 +69,7 @@ export async function createUser(name: string, role: UserRole): Promise<CreateUs
   const password = generatePlainPassword();
   const createdAt = nowIso();
   const uid = allocateUids([role])[0]!;
-  const hashedPassword = await hashPassword(digestPasswordForStorage(password), 'low');
+  const hashedPassword = await hashPassword(password, 'low');
   const result = db.insert(users).values({
     uid, password: hashedPassword, role, name,
     nameInitials: getPinyinInitials(name),
@@ -81,7 +81,7 @@ export async function createUser(name: string, role: UserRole): Promise<CreateUs
 export async function createUsers(entries: Array<{ name: string; role: UserRole; classId?: number | null }>) {
   if (entries.length === 0) return [];
   const passwords = entries.map(() => generatePlainPassword());
-  const hashes = await hashPasswords(passwords.map(digestPasswordForStorage), 'low');
+  const hashes = await hashPasswords(passwords, 'low');
   const createdAt = nowIso();
   const uids = allocateUids(entries.map((entry) => entry.role));
   const rows = entries.map((entry, index) => ({
@@ -126,7 +126,7 @@ export async function resetUserPasswords(ids: number[]) {
     .from(users).where(and(inArray(users.id, ids), isNull(users.deletedAt))).all();
   if (activeUsers.length === 0) return [];
   const passwords = activeUsers.map(() => generatePlainPassword());
-  const hashes = await hashPasswords(passwords.map(digestPasswordForStorage), 'low');
+  const hashes = await hashPasswords(passwords, 'low');
   return db.transaction((tx) => activeUsers.map((user, index) => {
     tx.update(users).set({ password: hashes[index]! }).where(eq(users.id, user.id)).run();
     return { id: user.id, uid: user.uid, role: user.role as UserRole, name: user.name, password: passwords[index]! };
@@ -174,7 +174,7 @@ export function seedDefaultAdmin() {
   const password = appConfig.initial_admin_password;
   db.insert(users).values([{
     uid: 'A00001',
-    password: hashPasswordSync(digestPasswordForStorage(password), 'low'),
+    password: hashPasswordSync(password, 'low'),
     role: 'admin',
     name: '超级奶龙',
     nameInitials: getPinyinInitials('超级奶龙'),

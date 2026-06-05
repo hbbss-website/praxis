@@ -1,6 +1,12 @@
 // @vitest-environment node
+import { createDecipheriv } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
-import { ApiResponseError, formatUploadImageMaxSize, hashPasswordForApi, unwrapResponse, validatePlainPassword } from './api';
+import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
+import { ApiResponseError, encryptPasswordForApi, formatUploadImageMaxSize, unwrapResponse, validatePlainPassword } from './api';
+
+function base64UrlToBuffer(value: string) {
+  return Buffer.from(value, 'base64url');
+}
 
 test('ApiResponseError stores status and message', () => {
   const error = new ApiResponseError(404, '未找到');
@@ -32,8 +38,27 @@ describe('formatUploadImageMaxSize', () => {
 });
 
 describe('password helpers', () => {
-  test('hashes password as sha-256 hex', async () => {
-    expect(await hashPasswordForApi('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  test('encrypts a password into a decryptable ML-KEM + AES-GCM envelope', async () => {
+    const { publicKey, secretKey } = ml_kem768.keygen();
+    const envelope = await encryptPasswordForApi('correct horse battery', {
+      keyId: 'test-key',
+      publicKey,
+      expiresAtMs: Date.now() + 60_000
+    });
+
+    const [keyId, kemCipherTextB64, ivB64, aesB64] = envelope.split('.');
+    expect(keyId).toBe('test-key');
+    expect(envelope.split('.')).toHaveLength(4);
+
+    const sharedSecret = ml_kem768.decapsulate(base64UrlToBuffer(kemCipherTextB64), secretKey);
+    const aesPayload = base64UrlToBuffer(aesB64);
+    const cipherText = aesPayload.subarray(0, aesPayload.length - 16);
+    const authTag = aesPayload.subarray(aesPayload.length - 16);
+    const decipher = createDecipheriv('aes-256-gcm', Buffer.from(sharedSecret), base64UrlToBuffer(ivB64));
+    decipher.setAuthTag(authTag);
+    const plaintext = Buffer.concat([decipher.update(cipherText), decipher.final()]).toString('utf8');
+
+    expect(plaintext).toBe('correct horse battery');
   });
 
   test('validates plain password length', () => {

@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 
 import { hashPassword } from '../auth/password';
+import { decryptEnvelope, EnvelopeDecryptError } from '../auth/password-key-manager';
 import { createUserCredentialsCsv } from '../csv/user-import';
 import { formatCsv } from '../csv/export';
 import database from '../database';
@@ -642,9 +643,21 @@ export const teacherRoutes = new Hono<AppBindings>()
     }
 
     if (body.password !== undefined && body.password !== '') {
-      const error = validatePassword(body.password);
+      let password: string;
+
+      try {
+        password = decryptEnvelope(body.password);
+      } catch (error) {
+        if (error instanceof EnvelopeDecryptError) {
+          return apiError(c, 400, error.message);
+        }
+
+        throw error;
+      }
+
+      const error = validatePassword(password);
       if (error) return apiError(c, 400, error);
-      database.updateUserPassword(studentId, await hashPassword(body.password));
+      database.updateUserPassword(studentId, await hashPassword(password));
     }
 
     if (body.class_id !== undefined) {

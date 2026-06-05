@@ -37,6 +37,7 @@ export interface AppConfig {
   comment_max_length: number;
   password_min_length: number;
   password_max_length: number;
+  password_key_rotation_ms: number;
   uid_max_length: number;
   location_max_length: number;
   max_record_duration: number;
@@ -117,6 +118,7 @@ function createDefaultConfig(): AppConfig {
     comment_max_length: 500,
     password_min_length: 8,
     password_max_length: 32,
+    password_key_rotation_ms: 30 * 60 * 1000,
     uid_max_length: 32,
     location_max_length: 120,
     max_record_duration: 24,
@@ -149,6 +151,16 @@ function getPositiveInteger(
   return Number.isInteger(value) && Number(value) > 0
     ? Number(value)
     : fallback;
+}
+
+function getBoundedInteger(
+  source: Record<string, unknown>,
+  key: keyof AppConfig,
+  fallback: number,
+  max: number,
+) {
+  const value = getPositiveInteger(source, key, fallback);
+  return value > max ? max : value;
 }
 
 function getBoolean(
@@ -289,6 +301,12 @@ function normalizeConfig(source: unknown): AppConfig {
       config,
       "password_max_length",
       fallback.password_max_length,
+    ),
+    password_key_rotation_ms: getBoundedInteger(
+      config,
+      "password_key_rotation_ms",
+      fallback.password_key_rotation_ms,
+      24 * 60 * 60 * 1000,
     ),
     uid_max_length: getPositiveInteger(
       config,

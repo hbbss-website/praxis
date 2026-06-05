@@ -19,21 +19,22 @@ export const CONTENT_MAX_LENGTH = appConfig.content_max_length;
 export const COMMENT_MAX_LENGTH = appConfig.comment_max_length;
 export const PASSWORD_MIN_LENGTH = appConfig.password_min_length;
 export const PASSWORD_MAX_LENGTH = appConfig.password_max_length;
-export const PASSWORD_DIGEST_LENGTH = 64;
 export const UID_MAX_LENGTH = appConfig.uid_max_length;
 export const MAX_RECORD_DURATION = appConfig.max_record_duration;
 
 export const userRoleSchema = z.enum(userRoles);
 export const recordStatusSchema = z.enum(recordStatuses);
 export const notificationTypeSchema = z.enum(notificationTypes);
+const passwordEnvelopePattern = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+){3}$/;
 const requiredPasswordSchema = z
   .string()
   .min(1, '密码不能为空。')
-  .length(PASSWORD_DIGEST_LENGTH, '密码格式无效。')
-  .regex(/^[0-9a-f]+$/i, '密码格式无效。');
+  .max(4096, '密码格式无效。')
+  .regex(passwordEnvelopePattern, '密码格式无效。');
 const optionalPasswordSchema = z
   .string()
-  .refine((value) => value === '' || /^[0-9a-f]{64}$/i.test(value), '密码格式无效。');
+  .max(4096, '密码格式无效。')
+  .refine((value) => value === '' || passwordEnvelopePattern.test(value), '密码格式无效。');
 
 export const idParamSchema = z.object({
   id: z.string().regex(positiveIdPattern)
@@ -210,8 +211,12 @@ export function validatePassword(password: string) {
     return '密码不能为空。';
   }
 
-  if (!/^[0-9a-f]{64}$/i.test(password)) {
-    return '密码格式无效。';
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return `密码至少需要 ${PASSWORD_MIN_LENGTH} 位。`;
+  }
+
+  if (password.length > PASSWORD_MAX_LENGTH) {
+    return `密码不能超过 ${PASSWORD_MAX_LENGTH} 位。`;
   }
 
   return null;

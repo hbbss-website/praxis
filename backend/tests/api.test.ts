@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createCipheriv, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { decodeJwt, SignJWT } from 'jose';
+import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
 
 const testDbPath = `/tmp/praxis-test-db-${Date.now()}.db`;
 const testConfigPath = `/tmp/praxis-test-config-${Date.now()}.toml`;
@@ -50,7 +52,6 @@ let parseUserImportCsvBuffer: CsvImportModule['parseUserImportCsvBuffer'];
 let parseUserImportCsvText: CsvImportModule['parseUserImportCsvText'];
 let createUserCredentialsCsv: CsvImportModule['createUserCredentialsCsv'];
 let hashPassword: PasswordModule['hashPassword'];
-let digestPasswordForStorage: PasswordModule['digestPasswordForStorage'];
 let isLowCostPasswordHash: PasswordModule['isLowCostPasswordHash'];
 
 beforeAll(async () => {
@@ -71,7 +72,6 @@ beforeAll(async () => {
   parseUserImportCsvText = csvImportModule.parseUserImportCsvText;
   createUserCredentialsCsv = csvImportModule.createUserCredentialsCsv;
   hashPassword = passwordModule.hashPassword;
-  digestPasswordForStorage = passwordModule.digestPasswordForStorage;
   isLowCostPasswordHash = passwordModule.isLowCostPasswordHash;
 
   await database.createUsers([
@@ -129,8 +129,35 @@ async function readJson(response: Response) {
   return await response.json() as Record<string, unknown>;
 }
 
+function fromBase64Url(value: string) {
+  return Buffer.from(value, 'base64url');
+}
+
+function toBase64Url(bytes: Uint8Array) {
+  return Buffer.from(bytes).toString('base64url');
+}
+
+// Mirrors the frontend `encryptPasswordFields`: fetch the current public key,
+// ML-KEM-768 encapsulate to derive the AES-256 key, then AES-256-GCM encrypt
+// the plaintext into a `keyId.kemCipherText.iv.aesCipherTextWithTag` envelope.
+async function encryptPassword(plaintext: string) {
+  const response = await apiRequest('/api/auth/public-key');
+  const payload = await readJson(response);
+  const keyId = payload.key_id as string;
+  const publicKey = fromBase64Url(payload.public_key as string);
+
+  const { cipherText, sharedSecret } = ml_kem768.encapsulate(publicKey);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', Buffer.from(sharedSecret), iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  const aesPayload = Buffer.concat([encrypted, authTag]);
+
+  return [keyId, toBase64Url(cipherText), toBase64Url(iv), toBase64Url(aesPayload)].join('.');
+}
+
 async function loginAs(uid: string, password: string) {
-  const response = await jsonRequest('/api/auth/login', { uid, password: digestPasswordForStorage(password) }, { method: 'POST' });
+  const response = await jsonRequest('/api/auth/login', { uid, password: await encryptPassword(password) }, { method: 'POST' });
   const payload = await readJson(response);
 
   if (!response.ok) {
@@ -169,7 +196,7 @@ async function setNormalPassword(uid: string, password: string) {
     throw new Error(`user not found: ${uid}`);
   }
 
-  database.updateUserPassword(user.id, await hashPassword(digestPasswordForStorage(password)));
+  database.updateUserPassword(user.id, await hashPassword(password));
 }
 
 function createTempUpload(name: string, content: string) {
@@ -447,7 +474,7 @@ describe('route behavior', () => {
     const createdUser = await database.createUser('待设置密码用户', 'student');
     const response = await jsonRequest('/api/auth/login', {
       uid: createdUser.uid,
-      password: digestPasswordForStorage(createdUser.password)
+      password: await encryptPassword(createdUser.password)
     }, { method: 'POST' });
     const payload = await readJson(response);
 
@@ -469,8 +496,8 @@ describe('route behavior', () => {
     expect((await readJson(blockedResponse)).error).toBe('请设置密码。');
 
     const changePasswordResponse = await jsonRequest('/api/auth/password', {
-      current_password: digestPasswordForStorage(createdUser.password),
-      new_password: digestPasswordForStorage('new-password-01')
+      current_password: await encryptPassword(createdUser.password),
+      new_password: await encryptPassword('new-password-01')
     }, {
       method: 'PUT',
       headers: {
@@ -484,7 +511,7 @@ describe('route behavior', () => {
 
     const reloginResponse = await jsonRequest('/api/auth/login', {
       uid: createdUser.uid,
-      password: digestPasswordForStorage('new-password-01')
+      password: await encryptPassword('new-password-01')
     }, { method: 'POST' });
     const reloginPayload = await readJson(reloginResponse);
 
@@ -505,13 +532,13 @@ describe('route behavior', () => {
     expect(payload.upload_image_max_size_bytes).toBe(5 * 1024 * 1024);
   });
 
-  test('rejects passwords that are not sha-256 hex in the backend', async () => {
+  test('rejects malformed password envelopes in the backend', async () => {
     await setNormalPassword('T00001', 'teacher-pass-01');
     const token = await loginAs('T00001', 'teacher-pass-01');
     expect(decodeJwt(token).aud).toBe('teacher');
     const response = await jsonRequest('/api/auth/password', {
-      current_password: digestPasswordForStorage('teacher-pass-01'),
-      new_password: '123456789012345678901234567890123'
+      current_password: await encryptPassword('teacher-pass-01'),
+      new_password: 'not-a-valid-envelope'
     }, {
       method: 'PUT',
       headers: {
@@ -953,7 +980,7 @@ describe('route behavior', () => {
     const headers = { 'x-real-ip': '203.0.113.10' };
 
     for (let index = 0; index < 3; index += 1) {
-      const response = await jsonRequest('/api/auth/login', { uid: 'S00001', password: digestPasswordForStorage('wrong-password') }, {
+      const response = await jsonRequest('/api/auth/login', { uid: 'S00001', password: await encryptPassword('wrong-password') }, {
         method: 'POST',
         headers
       });
@@ -961,14 +988,14 @@ describe('route behavior', () => {
       expect(response.status).toBe(401);
     }
 
-    const lockedResponse = await jsonRequest('/api/auth/login', { uid: 'S00001', password: digestPasswordForStorage('student-pass-01') }, {
+    const lockedResponse = await jsonRequest('/api/auth/login', { uid: 'S00001', password: await encryptPassword('student-pass-01') }, {
       method: 'POST',
       headers
     });
 
     expect(lockedResponse.status).toBe(429);
 
-    const otherUserResponse = await jsonRequest('/api/auth/login', { uid: 'S00002', password: digestPasswordForStorage('student-pass-02') }, {
+    const otherUserResponse = await jsonRequest('/api/auth/login', { uid: 'S00002', password: await encryptPassword('student-pass-02') }, {
       method: 'POST',
       headers
     });

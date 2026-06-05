@@ -1,4 +1,5 @@
 import { hc } from 'hono/client';
+import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
 
 import type { Api } from '../../../backend/src/app';
 import { API_URL, MAX_RECORD_IMAGES, type AppRuntimeConfig, type CreatedUser, type CreatedUsersPayload, type CsvImportPreview, type StoredUser, type UploadResult, type UserRole } from './types';
@@ -148,23 +149,143 @@ export function validatePlainPassword(password: string, config?: Pick<AppRuntime
   return null;
 }
 
-export async function hashPasswordForApi(password: string) {
-  const buffer = await crypto.subtle.digest('SHA-256', textEncoder.encode(password));
-  return Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+type PublicKeyResponse = {
+  key_id: string;
+  public_key: string;
+  algorithm: string;
+  expires_at: string;
+};
+
+type CachedPublicKey = {
+  keyId: string;
+  publicKey: Uint8Array;
+  expiresAtMs: number;
+};
+
+let cachedPublicKey: CachedPublicKey | null = null;
+
+function base64UrlToBytes(value: string) {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
 }
 
-async function hashPasswordFields<T extends Record<string, unknown>>(body: T, keys: Array<keyof T>) {
+function bytesToBase64Url(bytes: Uint8Array) {
+  let binary = '';
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function fetchPublicKey(): Promise<CachedPublicKey> {
+  const response = await fetch(`${getApiOrigin()}/api/auth/public-key`, {
+    headers: { accept: 'application/json' }
+  });
+
+  if (!response.ok) {
+    throw new ApiResponseError(response.status, '无法获取加密公钥，请稍后重试。');
+  }
+
+  const payload = await response.json() as PublicKeyResponse;
+  return {
+    keyId: payload.key_id,
+    publicKey: base64UrlToBytes(payload.public_key),
+    expiresAtMs: Date.parse(payload.expires_at)
+  };
+}
+
+async function getPublicKey(forceRefresh = false): Promise<CachedPublicKey> {
+  if (!forceRefresh && cachedPublicKey && Date.now() < cachedPublicKey.expiresAtMs) {
+    return cachedPublicKey;
+  }
+
+  cachedPublicKey = await fetchPublicKey();
+  return cachedPublicKey;
+}
+
+function clearPublicKeyCache() {
+  cachedPublicKey = null;
+}
+
+/**
+ * Encrypts a plaintext password into a `keyId.kemCipherText.iv.aesCipherTextWithTag`
+ * envelope: ML-KEM-768 encapsulation derives a 32-byte shared secret used as the
+ * AES-256-GCM key. WebCrypto appends the 16-byte GCM tag to the ciphertext, which
+ * the backend splits off before verifying.
+ */
+export async function encryptPasswordForApi(password: string, key: CachedPublicKey) {
+  const { cipherText, sharedSecret } = ml_kem768.encapsulate(key.publicKey);
+  const aesKey = await crypto.subtle.importKey('raw', sharedSecret, 'AES-GCM', false, ['encrypt']);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = new Uint8Array(
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, textEncoder.encode(password))
+  );
+
+  return [
+    key.keyId,
+    bytesToBase64Url(cipherText),
+    bytesToBase64Url(iv),
+    bytesToBase64Url(encrypted)
+  ].join('.');
+}
+
+async function encryptPasswordFields<T extends Record<string, unknown>>(
+  body: T,
+  keys: Array<keyof T>,
+  forceRefresh = false
+) {
+  const publicKey = await getPublicKey(forceRefresh);
   const nextBody = { ...body };
 
   for (const key of keys) {
     const value = nextBody[key];
 
     if (typeof value === 'string' && value !== '') {
-      nextBody[key] = await hashPasswordForApi(value) as T[keyof T];
+      nextBody[key] = await encryptPasswordForApi(value, publicKey) as T[keyof T];
     }
   }
 
   return nextBody;
+}
+
+// A 400 whose message references the key/ciphertext/decryption means the server
+// could not decrypt — typically because the in-memory key rotated or the server
+// restarted since we cached the public key. Those are recoverable by fetching a
+// fresh key and retrying; genuine validation errors (e.g. 密码至少需要 8 位) are not.
+function isStaleKeyError(result: { status: number; error: unknown }) {
+  if (result.status !== 400) {
+    return false;
+  }
+
+  const message = extractErrorMessage(result.error) ?? '';
+  return message.includes('密钥') || message.includes('密文') || message.includes('解密');
+}
+
+async function sendWithEncryptedPassword<T extends Record<string, unknown>>(
+  body: T,
+  keys: Array<keyof T>,
+  send: (encrypted: T) => ApiResult
+): ApiResult {
+  const encrypted = await encryptPasswordFields(body, keys);
+  const result = await send(encrypted);
+
+  if (!isStaleKeyError(result)) {
+    return result;
+  }
+
+  clearPublicKeyCache();
+  const retried = await encryptPasswordFields(body, keys, true);
+  return send(retried);
 }
 
 export function getApiOrigin() {
@@ -213,7 +334,7 @@ export function createApiClient() {
     type Body = Parameters<typeof client.admin.users[':id']['$put']>[0]['json'];
     return {
       put: (body: Body) =>
-        hashPasswordFields(body, ['password']).then((json) =>
+        sendWithEncryptedPassword(body, ['password'], (json) =>
           wrapRpcResponse(client.admin.users[':id'].$put({
             param: { id: toPathParam(id) },
             json
@@ -318,7 +439,7 @@ export function createApiClient() {
     type Body = Parameters<typeof client.teacher.students[':id']['$put']>[0]['json'];
     return {
       put: (body: Body) =>
-        hashPasswordFields(body, ['password']).then((json) =>
+        sendWithEncryptedPassword(body, ['password'], (json) =>
           wrapRpcResponse(client.teacher.students[':id'].$put({
             param: { id: toPathParam(id) },
             json
@@ -340,19 +461,19 @@ export function createApiClient() {
     auth: {
       login: {
         post: (body: AuthLoginJson) =>
-          hashPasswordFields(body, ['password']).then((json) => wrapRpcResponse(client.auth.login.$post({ json })))
+          sendWithEncryptedPassword(body, ['password'], (json) => wrapRpcResponse(client.auth.login.$post({ json })))
       },
       me: {
         get: () => wrapRpcResponse(client.auth.me.$get())
       },
       password: {
         put: (body: AuthPasswordJson) =>
-          hashPasswordFields(body, ['current_password', 'new_password'])
-            .then((json) => wrapRpcResponse(client.auth.password.$put({ json })))
+          sendWithEncryptedPassword(body, ['current_password', 'new_password'], (json) =>
+            wrapRpcResponse(client.auth.password.$put({ json })))
       },
       profile: {
         put: (body: AuthProfileJson) =>
-          hashPasswordFields(body, ['current_password']).then((json) => wrapRpcResponse(client.auth.profile.$put({ json })))
+          sendWithEncryptedPassword(body, ['current_password'], (json) => wrapRpcResponse(client.auth.profile.$put({ json })))
       },
       logout: {
         post: () => wrapRpcResponse(client.auth.logout.$post())

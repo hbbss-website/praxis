@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 
-import { digestPasswordForStorage, hashPassword } from '../src/auth/password';
+import { hashPassword } from '../src/auth/password';
 import database from '../src/database';
 import { db, sqlite } from '../src/db/client';
 import { practiceRecords } from '../src/db/schema';
@@ -36,7 +36,7 @@ async function main() {
   database.assignTeachersToClass(classes[1]!.id, [teacherA!.id]);
 
   for (const teacher of [teacherA, teacherB]) {
-    database.updateUserPassword(teacher!.id, await hashPassword(digestPasswordForStorage(teacherPassword)));
+    database.updateUserPassword(teacher!.id, await hashPassword(teacherPassword));
   }
 
   const students = await database.createUsers([
@@ -49,7 +49,7 @@ async function main() {
   ]);
 
   for (const student of students) {
-    database.updateUserPassword(student.id, await hashPassword(digestPasswordForStorage(studentPassword)));
+    database.updateUserPassword(student.id, await hashPassword(studentPassword));
   }
 
   const admin = database.findUserByUid('A00001')!;

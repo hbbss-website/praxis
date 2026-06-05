@@ -5,6 +5,7 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 import { clearLoginFailures, getRemainingLockoutMs, recordLoginFailure } from '../auth/login-attempts';
 import { trustProxy } from '../auth/config';
 import { hashPassword, isLowCostPasswordHash, verifyPassword } from '../auth/password';
+import { decryptEnvelope, EnvelopeDecryptError, getPublicKey } from '../auth/password-key-manager';
 import database from '../database';
 import {
   apiError,
@@ -54,13 +55,29 @@ function buildNetworkAttemptKey(clientAddress: string) {
 
 export const authRoutes = new Hono<AppBindings>()
   .use('*', authMiddleware)
+  .get('/public-key', (c) => {
+    c.header('cache-control', 'no-store');
+    return c.json(getPublicKey());
+  })
   .post('/login', zValidator('json', loginBodySchema, validationHook), async (c) => {
     const body = c.req.valid('json');
     const uid = body.uid.trim().toUpperCase();
-    const password = body.password;
     const clientAddress = resolveClientAddress(c);
     const uidAttemptKey = buildUidAttemptKey(uid, clientAddress);
     const networkAttemptKey = buildNetworkAttemptKey(clientAddress);
+
+    let password: string;
+
+    try {
+      password = decryptEnvelope(body.password);
+    } catch (error) {
+      if (error instanceof EnvelopeDecryptError) {
+        c.header('cache-control', 'no-store');
+        return apiError(c, 400, error.message);
+      }
+
+      throw error;
+    }
 
     if (!uid || !password) {
       return apiError(c, 400, 'UID 和密码不能为空。');
@@ -141,19 +158,33 @@ export const authRoutes = new Hono<AppBindings>()
       return apiError(c, 404, '用户不存在。');
     }
 
-    const passwordError = validatePassword(body.new_password);
+    let currentPassword: string;
+    let newPassword: string;
+
+    try {
+      currentPassword = decryptEnvelope(body.current_password);
+      newPassword = decryptEnvelope(body.new_password);
+    } catch (error) {
+      if (error instanceof EnvelopeDecryptError) {
+        return apiError(c, 400, error.message);
+      }
+
+      throw error;
+    }
+
+    const passwordError = validatePassword(newPassword);
 
     if (passwordError) {
       return apiError(c, 400, passwordError);
     }
 
-    const matched = await verifyPassword(body.current_password, userRecord.password);
+    const matched = await verifyPassword(currentPassword, userRecord.password);
 
     if (!matched) {
       return apiError(c, 401, '当前密码错误。');
     }
 
-    database.updateUserPassword(userRecord.id, await hashPassword(body.new_password));
+    database.updateUserPassword(userRecord.id, await hashPassword(newPassword));
     const authUser = {
       ...currentUser,
       password_setup_required: false
@@ -193,7 +224,19 @@ export const authRoutes = new Hono<AppBindings>()
       return apiError(c, 404, '用户不存在。');
     }
 
-    const matched = await verifyPassword(body.current_password, userRecord.password);
+    let currentPassword: string;
+
+    try {
+      currentPassword = decryptEnvelope(body.current_password);
+    } catch (error) {
+      if (error instanceof EnvelopeDecryptError) {
+        return apiError(c, 400, error.message);
+      }
+
+      throw error;
+    }
+
+    const matched = await verifyPassword(currentPassword, userRecord.password);
 
     if (!matched) {
       return apiError(c, 401, '当前密码错误。');
