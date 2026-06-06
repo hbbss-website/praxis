@@ -219,7 +219,7 @@ function createTempUpload(name: string, content: string) {
   };
 }
 
-function createOpenTaskForStudent(studentId: number) {
+function createOpenTaskForStudent(studentId: number, scoreEnabled = false) {
   const targetClass = database.createClass(`任务测试班级 ${Date.now()} ${Math.random()}`);
   database.assignStudentsToClass(targetClass.id, [studentId]);
 
@@ -231,6 +231,7 @@ function createOpenTaskForStudent(studentId: number) {
     min_words: 0,
     min_images: 0,
     max_records_per_student: 10,
+    score_enabled: scoreEnabled,
     class_ids: [targetClass.id],
     created_by_id: 1
   });
@@ -891,6 +892,170 @@ describe('route behavior', () => {
     expect(fs.existsSync(storedFile)).toBe(false);
   });
 
+  test('validates scored task reviews and sorts records by score in the database', async () => {
+    await setNormalPassword('1', 'admin-pass-01');
+    const token = await loginAs('1', 'admin-pass-01');
+    const student = await database.createUser('打分测试学生', 'student');
+    const task = createOpenTaskForStudent(student.id, true);
+    const lowRecord = database.createRecord({
+      task_id: task.id,
+      student_id: student.id,
+      title: '低分记录',
+      content: '用于测试分数排序。',
+      practice_date: '2026-02-03',
+      location: null,
+      duration: 1,
+      image_paths: [],
+      cover_image_path: null
+    });
+    const highRecord = database.createRecord({
+      task_id: task.id,
+      student_id: student.id,
+      title: '高分记录',
+      content: '用于测试分数排序。',
+      practice_date: '2026-02-04',
+      location: null,
+      duration: 1,
+      image_paths: [],
+      cover_image_path: null
+    });
+    const pendingRecord = database.createRecord({
+      task_id: task.id,
+      student_id: student.id,
+      title: '无分记录',
+      content: '用于测试空分数排序。',
+      practice_date: '2026-02-05',
+      location: null,
+      duration: 1,
+      image_paths: [],
+      cover_image_path: null
+    });
+
+    const missingScoreResponse = await jsonRequest(`/api/teacher/records/${lowRecord.id}/review`, {
+      status: 'approved',
+      comment: ''
+    }, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${token}` }
+    });
+    const negativeScoreResponse = await jsonRequest(`/api/teacher/records/${lowRecord.id}/review`, {
+      status: 'approved',
+      score: -1
+    }, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${token}` }
+    });
+    const overflowScoreResponse = await jsonRequest(`/api/teacher/records/${lowRecord.id}/review`, {
+      status: 'approved',
+      score: 101
+    }, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${token}` }
+    });
+    const decimalScoreResponse = await jsonRequest(`/api/teacher/records/${lowRecord.id}/review`, {
+      status: 'approved',
+      score: 88.5
+    }, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    expect(missingScoreResponse.status).toBe(400);
+    expect((await readJson(missingScoreResponse)).error).toBe('分数必须是 0 到 100 的整数。');
+    expect(negativeScoreResponse.status).toBe(400);
+    expect(overflowScoreResponse.status).toBe(400);
+    expect(decimalScoreResponse.status).toBe(400);
+
+    const lowReviewResponse = await jsonRequest(`/api/teacher/records/${lowRecord.id}/review`, {
+      status: 'approved',
+      score: 70,
+      comment: '通过'
+    }, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${token}` }
+    });
+    const highReviewResponse = await jsonRequest(`/api/teacher/records/${highRecord.id}/review`, {
+      status: 'approved',
+      score: 95
+    }, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    expect(lowReviewResponse.status).toBe(200);
+    expect(highReviewResponse.status).toBe(200);
+    expect(database.getRecordById(lowRecord.id)?.score).toBe(70);
+
+    const detailResponse = await apiRequest(`/api/teacher/records/${lowRecord.id}`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    const detailPayload = await readJson(detailResponse);
+    expect(detailPayload.record).toMatchObject({ id: lowRecord.id, score: 70 });
+
+    const descResponse = await apiRequest(`/api/teacher/records?task_id=${task.id}&sort=score_desc`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    const descPayload = await readJson(descResponse);
+    expect((descPayload.records as Array<{ id: number }>).map((record) => record.id)).toEqual([highRecord.id, lowRecord.id, pendingRecord.id]);
+
+    const ascResponse = await apiRequest(`/api/teacher/records?task_id=${task.id}&sort=score_asc`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    const ascPayload = await readJson(ascResponse);
+    expect((ascPayload.records as Array<{ id: number }>).map((record) => record.id)).toEqual([lowRecord.id, highRecord.id, pendingRecord.id]);
+
+    const rejectResponse = await jsonRequest(`/api/teacher/records/${lowRecord.id}/review`, {
+      status: 'rejected',
+      comment: '退回'
+    }, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    expect(rejectResponse.status).toBe(200);
+    expect(database.getRecordById(lowRecord.id)?.score).toBeNull();
+
+    const batchResponse = await jsonRequest('/api/teacher/record-reviews/batch', {
+      ids: [pendingRecord.id],
+      action: 'approved'
+    }, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    expect(batchResponse.status).toBe(400);
+    expect((await readJson(batchResponse)).error).toBe('启用打分的任务不能批量通过。');
+  });
+
+  test('rejects scores for tasks without scoring enabled', async () => {
+    await setNormalPassword('1', 'admin-pass-01');
+    const token = await loginAs('1', 'admin-pass-01');
+    const student = await database.createUser('无打分测试学生', 'student');
+    const task = createOpenTaskForStudent(student.id);
+    const record = database.createRecord({
+      task_id: task.id,
+      student_id: student.id,
+      title: '普通记录',
+      content: '用于测试未启用打分。',
+      practice_date: '2026-02-06',
+      location: null,
+      duration: 1,
+      image_paths: [],
+      cover_image_path: null
+    });
+
+    const response = await jsonRequest(`/api/teacher/records/${record.id}/review`, {
+      status: 'approved',
+      score: 90
+    }, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    expect(response.status).toBe(400);
+    expect((await readJson(response)).error).toBe('该任务未启用打分。');
+  });
+
   test('prevents admins from deleting themselves', async () => {
     await setNormalPassword('1', 'admin-pass-01');
     const token = await loginAs('1', 'admin-pass-01');
@@ -1049,11 +1214,12 @@ describe('route behavior', () => {
       min_words: 0,
       min_images: 0,
       max_records_per_student: 10,
+      score_enabled: true,
       class_ids: [targetClass.id],
       created_by_id: 1
     });
 
-    database.createRecord({
+    const record = database.createRecord({
       task_id: task.id,
       student_id: student.id,
       title: '=cmd|"/c calc"!A0',
@@ -1064,6 +1230,10 @@ describe('route behavior', () => {
       image_paths: [],
       cover_image_path: null
     });
+    database.updateRecord(record.id, {
+      status: 'approved',
+      score: 88
+    });
 
     const response = await jsonRequest(`/api/teacher/tasks/${task.id}/export`, { class_ids: [targetClass.id] }, {
       method: 'POST',
@@ -1072,10 +1242,13 @@ describe('route behavior', () => {
 
     expect(response.status).toBe(200);
     const csv = await response.text();
+    const headerLine = csv.trim().split('\n')[0];
     const dataLine = csv.trim().split('\n')[1];
 
+    expect(headerLine).toContain('"分数"');
     expect(dataLine).toContain('"\'=cmd|""/c calc""!A0"');
     expect(dataLine).toContain('"\'@SUM(1+1)"');
+    expect(dataLine).toContain('"88"');
     expect(dataLine).toContain(`"${targetClass.name}"`);
     expect(dataLine).not.toContain(',"=cmd');
   });

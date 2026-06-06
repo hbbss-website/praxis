@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 
-import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 
-import type { CreateRecordInput, RecordFilters, StudentRecord, TeacherRecord, TeacherRecordExport, TeacherRecordSummary, UpdateRecordInput } from '../../models';
+import type { CreateRecordInput, RecordFilters, RecordSort, StudentRecord, TeacherRecord, TeacherRecordExport, TeacherRecordSummary, UpdateRecordInput } from '../../models';
 import { MAX_RECORD_IMAGES } from '../../models';
 import { db } from '../client';
 import {
@@ -27,7 +27,7 @@ export function createRecord(input: CreateRecordInput) {
     duration: input.duration,
     imagePaths: serializeImagePaths(images.imagePaths),
     coverImagePath: images.coverImagePath,
-    status: 'pending', teacherComment: null, createdAt
+    status: 'pending', teacherComment: null, score: null, createdAt
   }).run();
   return getRecordById(Number(result.lastInsertRowid))!;
 }
@@ -117,7 +117,7 @@ export function getRecordsForExport(filters: RecordFilters = {}, visibleStudentI
       title: practiceRecords.title, content: practiceRecords.content,
       practice_date: practiceRecords.practiceDate, location: practiceRecords.location,
       duration: practiceRecords.duration, status: practiceRecords.status,
-      teacher_comment: practiceRecords.teacherComment, created_at: practiceRecords.createdAt,
+      score: practiceRecords.score, teacher_comment: practiceRecords.teacherComment, created_at: practiceRecords.createdAt,
       image_paths: practiceRecords.imagePaths,
       class_name: classes.name,
       ...recordIdentitySelect()
@@ -134,30 +134,33 @@ export function getRecordsForExport(filters: RecordFilters = {}, visibleStudentI
       student_name: row.student_name, student_uid: row.student_uid,
       title: row.title, practice_date: row.practice_date, duration: row.duration,
       location: row.location ?? '', status: row.status as TeacherRecordSummary['status'],
+      score: row.score,
       teacher_comment: row.teacher_comment ?? '', created_at: row.created_at,
       content: row.content, image_count: normalizeRecordImagePaths(row.image_paths).length
     }));
 }
 
-export function getAllRecords(filters: RecordFilters = {}, visibleStudentIds?: Set<number>): TeacherRecordSummary[] {
+export function getAllRecords(filters: RecordFilters = {}, visibleStudentIds?: Set<number>, sort: RecordSort = 'created_at_desc'): TeacherRecordSummary[] {
   const where = buildRecordWhere(filters, visibleStudentIds);
   return db
     .select({
       id: practiceRecords.id, task_id: practiceRecords.taskId,
       student_id: practiceRecords.studentId, title: practiceRecords.title,
       practice_date: practiceRecords.practiceDate, status: practiceRecords.status,
+      score: practiceRecords.score,
       created_at: practiceRecords.createdAt,
       ...recordIdentitySelect()
     })
     .from(practiceRecords)
     .leftJoin(users, eq(practiceRecords.studentId, users.id))
     .where(where)
-    .orderBy(desc(practiceRecords.createdAt))
+    .orderBy(...buildRecordOrderBy(sort))
     .all()
     .map((row) => ({
       id: row.id, task_id: row.task_id, student_id: row.student_id,
       title: row.title, practice_date: row.practice_date,
       status: row.status as TeacherRecordSummary['status'],
+      score: row.score,
       created_at: row.created_at, student_name: row.student_name, student_uid: row.student_uid
     }));
 }
@@ -185,6 +188,7 @@ export function updateRecord(id: number, updates: UpdateRecordInput) {
   }
   if (updates.status !== undefined) nextValues.status = updates.status;
   if (updates.teacher_comment !== undefined) nextValues.teacherComment = updates.teacher_comment;
+  if (updates.score !== undefined) nextValues.score = updates.score;
   db.update(practiceRecords).set(nextValues).where(eq(practiceRecords.id, id)).run();
   return getRecordById(id);
 }
@@ -235,4 +239,11 @@ function prepareRecordImages(imagePathsInput: string[], coverImagePathInput: str
     ? movedImagePaths.get(coverImagePathInput)!
     : imagePaths[0] ?? null;
   return { imagePaths, coverImagePath };
+}
+
+function buildRecordOrderBy(sort: RecordSort) {
+  if (sort === 'created_at_asc') return [asc(practiceRecords.createdAt)];
+  if (sort === 'score_desc') return [sql`case when ${practiceRecords.score} is null then 1 else 0 end`, desc(practiceRecords.score), desc(practiceRecords.createdAt)];
+  if (sort === 'score_asc') return [sql`case when ${practiceRecords.score} is null then 1 else 0 end`, asc(practiceRecords.score), desc(practiceRecords.createdAt)];
+  return [desc(practiceRecords.createdAt)];
 }

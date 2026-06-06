@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 
 import { appConfig } from './config';
-import type { PublicUser, RecordFilters, RecordStatus, UserRole } from './models';
+import type { PublicUser, RecordFilters, RecordSort, RecordStatus, UserRole } from './models';
 import { MAX_RECORD_IMAGES, notificationTypes, recordStatuses, userRoles } from './models';
 import type { AppBindings } from './plugins/auth';
 import { getZonedDateString } from './time';
@@ -23,6 +23,7 @@ export const MAX_RECORD_DURATION = appConfig.max_record_duration;
 
 export const userRoleSchema = z.enum(userRoles);
 export const recordStatusSchema = z.enum(recordStatuses);
+export const recordSortSchema = z.enum(['created_at_desc', 'created_at_asc', 'score_desc', 'score_asc'] satisfies [RecordSort, RecordSort, RecordSort, RecordSort]);
 export const notificationTypeSchema = z.enum(notificationTypes);
 const passwordEnvelopePattern = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+){3}$/;
 const requiredPasswordSchema = z
@@ -132,7 +133,8 @@ export const updateRecordBodySchema = z.object({
 
 export const reviewRecordBodySchema = z.object({
   status: recordStatusSchema,
-  comment: z.string().max(COMMENT_MAX_LENGTH).optional()
+  comment: z.string().max(COMMENT_MAX_LENGTH).optional(),
+  score: z.number().int().min(0).max(100).optional()
 });
 
 export const batchReviewBodySchema = z.object({
@@ -147,6 +149,7 @@ export const recordQuerySchema = z.object({
   class_id: z.string().regex(positiveIdPattern).optional(),
   class_ids: z.string().optional(),
   status: recordStatusSchema.optional(),
+  sort: recordSortSchema.optional(),
   practice_after: z.string().optional(),
   practice_before: z.string().optional(),
   created_after: z.string().optional(),
@@ -161,10 +164,11 @@ export const createTaskBodySchema = z.object({
   min_words: z.number().int().min(0).max(CONTENT_MAX_LENGTH),
   min_images: z.number().int().min(0).max(MAX_RECORD_IMAGES),
   max_records_per_student: z.number().int().min(1).max(100),
+  score_enabled: z.boolean(),
   class_ids: z.array(z.number().int().positive()).min(1)
 });
 
-export const updateTaskBodySchema = createTaskBodySchema.partial().extend({
+export const updateTaskBodySchema = createTaskBodySchema.omit({ score_enabled: true }).partial().extend({
   class_ids: z.array(z.number().int().positive()).min(1).optional()
 });
 
@@ -437,6 +441,7 @@ export function validateRecordFilters(query: Record<string, unknown>) {
 
 export function normalizeRecordFilters(query: RecordFilters): RecordFilters {
   return {
+    task_id: query.task_id ?? null,
     student_id: query.student_id ?? null,
     student_ids: query.student_ids ?? null,
     class_id: query.class_id ?? null,

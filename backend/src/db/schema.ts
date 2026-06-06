@@ -63,6 +63,7 @@ export const practiceTasks = sqliteTable('practice_tasks', {
   minWords: integer('min_words').notNull().default(0),
   minImages: integer('min_images').notNull().default(0),
   maxRecordsPerStudent: integer('max_records_per_student').notNull().default(1),
+  scoreEnabled: integer('score_enabled', { mode: 'boolean' }).notNull().default(false),
   createdById: integer('created_by_id').notNull().references(() => users.id),
   createdAt: text('created_at').notNull()
 }, (table) => [
@@ -96,11 +97,13 @@ export const practiceRecords = sqliteTable('practice_records', {
   coverImagePath: text('cover_image_path'),
   status: text('status').notNull(),
   teacherComment: text('teacher_comment'),
+  score: integer('score'),
   createdAt: text('created_at').notNull()
 }, (table) => [
   index('practice_records_task_idx').on(table.taskId),
   index('practice_records_student_idx').on(table.studentId),
   index('practice_records_task_student_idx').on(table.taskId, table.studentId),
+  index('practice_records_task_score_idx').on(table.taskId, table.score),
   index('practice_records_cover_image_path_idx').on(table.coverImagePath),
   index('practice_records_status_idx').on(table.status),
   index('practice_records_practice_date_idx').on(table.practiceDate),

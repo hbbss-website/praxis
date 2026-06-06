@@ -57,6 +57,7 @@ export function toPracticeRecord(row: typeof practiceRecords.$inferSelect): Prac
     cover_image_path: row.coverImagePath && imagePaths.includes(row.coverImagePath) ? row.coverImagePath : imagePaths[0] ?? null,
     status: row.status as PracticeRecord['status'],
     teacher_comment: row.teacherComment,
+    score: row.score,
     created_at: row.createdAt
   };
 }
@@ -71,6 +72,7 @@ export function toPracticeTask(row: PracticeTaskRow): PracticeTask {
     min_words: row.minWords,
     min_images: row.minImages,
     max_records_per_student: row.maxRecordsPerStudent,
+    score_enabled: row.scoreEnabled,
     created_by_id: row.createdById,
     created_at: row.createdAt
   };

@@ -131,6 +131,7 @@ export function TeacherTasksPage() {
         form={form}
         onOpenChange={setFormOpen}
         onFormChange={setForm}
+        showScoreEnabled={!editingTask}
         lockedClassIds={editingTask?.classes.map((item) => item.id)}
         onRemoveClassRequest={async (targetClasses) => {
           if (!editingTask) return;
@@ -144,7 +145,8 @@ export function TeacherTasksPage() {
         onSubmit={async () => {
           try {
             if (editingTask) {
-              await unwrapResponse(createApiClient().teacher.tasks({ id: editingTask.id }).put(formToPayload(form)));
+              const { score_enabled: _scoreEnabled, ...payload } = formToPayload(form);
+              await unwrapResponse(createApiClient().teacher.tasks({ id: editingTask.id }).put(payload));
             } else {
               await unwrapResponse(createApiClient().teacher.tasks.post(formToPayload(form)));
             }

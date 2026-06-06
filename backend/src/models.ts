@@ -6,6 +6,7 @@ export const MAX_RECORD_IMAGES = 9;
 export type UserRole = typeof userRoles[number];
 export type RecordStatus = typeof recordStatuses[number];
 export type NotificationType = typeof notificationTypes[number];
+export type RecordSort = 'created_at_desc' | 'created_at_asc' | 'score_desc' | 'score_asc';
 
 export interface AppNotification {
   id: number;
@@ -68,6 +69,7 @@ export interface PracticeRecord {
   cover_image_path: string | null;
   status: RecordStatus;
   teacher_comment: string | null;
+  score: number | null;
   created_at: string;
 }
 
@@ -86,6 +88,7 @@ export interface TeacherRecordSummary {
   title: string;
   practice_date: string;
   status: RecordStatus;
+  score: number | null;
   created_at: string;
   student_name: string;
   student_uid: number;
@@ -100,6 +103,7 @@ export interface TeacherRecordExport {
   duration: number;
   location: string;
   status: RecordStatus;
+  score: number | null;
   teacher_comment: string;
   created_at: string;
   content: string;
@@ -128,6 +132,7 @@ export interface UpdateRecordInput {
   cover_image_path?: string | null;
   status?: RecordStatus;
   teacher_comment?: string | null;
+  score?: number | null;
 }
 
 export interface RecordFilters {
@@ -152,6 +157,7 @@ export interface PracticeTask {
   min_words: number;
   min_images: number;
   max_records_per_student: number;
+  score_enabled: boolean;
   created_by_id: number;
   created_at: string;
 }
@@ -177,6 +183,7 @@ export interface CreatePracticeTaskInput {
   min_words: number;
   min_images: number;
   max_records_per_student: number;
+  score_enabled: boolean;
   class_ids: number[];
   created_by_id: number;
 }

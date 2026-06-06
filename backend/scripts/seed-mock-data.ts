@@ -62,6 +62,7 @@ async function main() {
       min_words: 80,
       min_images: 1,
       max_records_per_student: 3,
+      score_enabled: true,
       class_ids: [classes[0]!.id, classes[1]!.id],
       created_by_id: teacherA!.id
     }),
@@ -73,6 +74,7 @@ async function main() {
       min_words: 120,
       min_images: 0,
       max_records_per_student: 2,
+      score_enabled: false,
       class_ids: classes.map((item) => item.id),
       created_by_id: admin.id
     }),
@@ -84,6 +86,7 @@ async function main() {
       min_words: 60,
       min_images: 0,
       max_records_per_student: 2,
+      score_enabled: false,
       class_ids: [classes[0]!.id],
       created_by_id: teacherA!.id
     }),
@@ -95,6 +98,7 @@ async function main() {
       min_words: 100,
       min_images: 0,
       max_records_per_student: 2,
+      score_enabled: false,
       class_ids: [classes[2]!.id],
       created_by_id: teacherB!.id
     })
@@ -125,7 +129,8 @@ async function main() {
     });
     database.updateRecord(record.id, {
       status,
-      teacher_comment: status === 'rejected' ? '内容略短，请补充具体过程。' : null
+      teacher_comment: status === 'rejected' ? '内容略短，请补充具体过程。' : null,
+      score: taskId === tasks[0]!.id && status === 'approved' ? 92 : null
     });
     setRecordCreatedAt(record.id, iso(createdAt));
   }

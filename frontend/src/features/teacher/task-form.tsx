@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { DateTimePickerField } from '@/shared/date-picker-field';
 import type { ClassSummary, PracticeTaskDetail } from '@/lib/types';
@@ -16,6 +17,7 @@ export type TaskFormState = {
   min_words: string;
   min_images: string;
   max_records_per_student: string;
+  score_enabled: boolean;
   class_ids: number[];
 };
 
@@ -27,6 +29,7 @@ export const emptyTaskForm: TaskFormState = {
   min_words: '0',
   min_images: '0',
   max_records_per_student: '1',
+  score_enabled: false,
   class_ids: []
 };
 
@@ -49,6 +52,7 @@ export function taskToForm(task: PracticeTaskDetail): TaskFormState {
     min_words: String(task.min_words),
     min_images: String(task.min_images),
     max_records_per_student: String(task.max_records_per_student),
+    score_enabled: task.score_enabled,
     class_ids: task.classes.map((item) => item.id)
   };
 }
@@ -62,6 +66,7 @@ export function formToPayload(form: TaskFormState) {
     min_words: Number(form.min_words),
     min_images: Number(form.min_images),
     max_records_per_student: Number(form.max_records_per_student),
+    score_enabled: form.score_enabled,
     class_ids: form.class_ids
   };
 }
@@ -74,6 +79,7 @@ export function TaskFormDialog({
   onOpenChange,
   onFormChange,
   lockedClassIds = [],
+  showScoreEnabled = false,
   onRemoveClassRequest,
   onSubmit
 }: {
@@ -84,6 +90,7 @@ export function TaskFormDialog({
   onOpenChange: (open: boolean) => void;
   onFormChange: (form: TaskFormState) => void;
   lockedClassIds?: number[];
+  showScoreEnabled?: boolean;
   onRemoveClassRequest?: (targetClasses: ClassSummary[]) => void;
   onSubmit: () => Promise<void>;
 }) {
@@ -121,6 +128,14 @@ export function TaskFormDialog({
             <Field label="最少图片数量"><Input type="number" min="0" max="9" value={form.min_images} onChange={(event) => onFormChange({ ...form, min_images: event.target.value })} /></Field>
             <Field label="每人最多记录数"><Input type="number" min="1" value={form.max_records_per_student} onChange={(event) => onFormChange({ ...form, max_records_per_student: event.target.value })} /></Field>
           </div>
+          {showScoreEnabled ? (
+            <Field label="打分">
+              <label className="flex items-center gap-2 text-sm">
+                <Switch checked={form.score_enabled} onCheckedChange={(checked) => onFormChange({ ...form, score_enabled: checked })} />
+                启用打分
+              </label>
+            </Field>
+          ) : null}
           <UserMultiCombobox
             label="班级"
             value={form.class_ids}

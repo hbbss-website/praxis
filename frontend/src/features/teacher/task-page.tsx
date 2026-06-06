@@ -9,6 +9,7 @@ import { DateRangePickerField } from '@/shared/date-picker-field';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiResponseError, createApiClient, unwrapResponse } from '@/lib/api';
@@ -16,7 +17,7 @@ import { useSession } from '@/lib/auth';
 import { toastError, toastSuccess } from '@/lib/feedback';
 import { formatDateTime } from '@/lib/format';
 import type { ClassSummary, PracticeTaskDetail, StudentWithClassSummary, TeacherRecord, TeacherRecordSummary } from '@/lib/types';
-import { defaultFilters, ErrorCard, Field, LoadingCard, PageFrame, RecordPreview, StatusBadge, StudentMultiCombobox, toStudentOption, UserMultiCombobox } from './shared';
+import { defaultFilters, ErrorCard, Field, LoadingCard, PageFrame, RecordPreview, SortButton, StatusBadge, StudentMultiCombobox, toStudentOption, UserMultiCombobox } from './shared';
 import { formToPayload, taskToForm, TaskFormDialog, type TaskFormState } from './task-form';
 
 export function TeacherTaskPage() {
@@ -34,6 +35,8 @@ export function TeacherTaskPage() {
   const [error, setError] = useState('');
   const [reviewRecord, setReviewRecord] = useState<TeacherRecord | null>(null);
   const [reviewComment, setReviewComment] = useState('');
+  const [reviewScore, setReviewScore] = useState('');
+  const [sortBy, setSortBy] = useState<'created_at_desc' | 'score_desc' | 'score_asc'>('created_at_desc');
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<TaskFormState | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -80,7 +83,8 @@ export function TeacherTaskPage() {
           practice_after: filters.practice_after || undefined,
           practice_before: filters.practice_before || undefined,
           created_after: filters.created_after ? new Date(filters.created_after).toISOString() : undefined,
-          created_before: filters.created_before ? new Date(`${filters.created_before}T23:59:59.999`).toISOString() : undefined
+          created_before: filters.created_before ? new Date(`${filters.created_before}T23:59:59.999`).toISOString() : undefined,
+          sort: sortBy
         }
       }));
       setRecords(data.records);
@@ -101,7 +105,7 @@ export function TeacherTaskPage() {
 
   useEffect(() => {
     void loadRecords();
-  }, [taskId, filters]);
+  }, [taskId, filters, sortBy]);
 
   const loadClassOptions = useCallback(async (query: string) => {
     const normalized = query.trim().toLowerCase();
@@ -124,25 +128,59 @@ export function TeacherTaskPage() {
     }
   }, [filters.class_ids, task]);
 
-  const columns = useMemo<Array<ColumnDef<TeacherRecordSummary>>>(() => [
-    { accessorKey: 'student_name', header: '学生' },
-    { accessorKey: 'student_uid', header: 'UID' },
-    { accessorKey: 'title', header: '标题' },
-    { accessorKey: 'practice_date', header: '实践日期' },
-    { accessorKey: 'status', header: '状态', cell: ({ row }) => <StatusBadge status={row.original.status} /> },
-    { accessorKey: 'created_at', header: '提交时间', cell: ({ row }) => formatDateTime(row.original.created_at) },
-    {
-      id: 'actions',
-      header: '操作',
-      cell: ({ row }) => (
-        <Button size="sm" onClick={async () => {
-          const data = await unwrapResponse<{ record: TeacherRecord }>(createApiClient().teacher.records({ id: row.original.id }).get());
-          setReviewRecord(data.record);
-          setReviewComment(data.record.teacher_comment ?? '');
-        }}>处理</Button>
-      )
+  const columns = useMemo<Array<ColumnDef<TeacherRecordSummary>>>(() => {
+    const baseColumns: Array<ColumnDef<TeacherRecordSummary>> = [
+      { accessorKey: 'student_name', header: '学生' },
+      { accessorKey: 'student_uid', header: 'UID' },
+      { accessorKey: 'title', header: '标题' },
+      { accessorKey: 'practice_date', header: '实践日期' },
+      { accessorKey: 'status', header: '状态', cell: ({ row }) => <StatusBadge status={row.original.status} /> }
+    ];
+
+    if (task?.score_enabled) {
+      baseColumns.push({
+        accessorKey: 'score',
+        header: () => (
+          <SortButton
+            active={sortBy === 'score_desc' || sortBy === 'score_asc'}
+            descending={sortBy === 'score_desc'}
+            label="分数"
+            onClick={() => setSortBy((current) => current === 'score_desc' ? 'score_asc' : 'score_desc')}
+          />
+        ),
+        cell: ({ row }) => row.original.score ?? '-'
+      });
     }
-  ], []);
+
+    baseColumns.push(
+      {
+        accessorKey: 'created_at',
+        header: () => (
+          <SortButton
+            active={sortBy === 'created_at_desc'}
+            descending
+            label="提交时间"
+            onClick={() => setSortBy('created_at_desc')}
+          />
+        ),
+        cell: ({ row }) => formatDateTime(row.original.created_at)
+      },
+      {
+        id: 'actions',
+        header: '操作',
+        cell: ({ row }) => (
+          <Button size="sm" onClick={async () => {
+            const data = await unwrapResponse<{ record: TeacherRecord }>(createApiClient().teacher.records({ id: row.original.id }).get());
+            setReviewRecord(data.record);
+            setReviewComment(data.record.teacher_comment ?? '');
+            setReviewScore(data.record.score === null ? '' : String(data.record.score));
+          }}>处理</Button>
+        )
+      }
+    );
+
+    return baseColumns;
+  }, [sortBy, task?.score_enabled]);
 
   return (
     <PageFrame
@@ -235,7 +273,8 @@ export function TeacherTaskPage() {
           onSubmit={async () => {
             if (!task) return;
             try {
-              await unwrapResponse(createApiClient().teacher.tasks({ id: task.id }).put(formToPayload(form)));
+              const { score_enabled: _scoreEnabled, ...payload } = formToPayload(form);
+              await unwrapResponse(createApiClient().teacher.tasks({ id: task.id }).put(payload));
               toastSuccess('任务已更新。');
               setFormOpen(false);
               await loadTask();
@@ -327,6 +366,9 @@ export function TeacherTaskPage() {
               <div className="space-y-4">
                 <RecordPreview record={reviewRecord} />
                 <Field label="评语"><Textarea value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} /></Field>
+                {task?.score_enabled ? (
+                  <Field label="分数"><Input type="number" min="0" max="100" step="1" value={reviewScore} onChange={(event) => setReviewScore(event.target.value)} /></Field>
+                ) : null}
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button variant="destructive" onClick={async () => {
                     if (!reviewRecord) return;
@@ -342,7 +384,16 @@ export function TeacherTaskPage() {
                   }}>驳回</Button>
                   <Button onClick={async () => {
                     if (!reviewRecord) return;
-                    await unwrapResponse(createApiClient().teacher.records({ id: reviewRecord.id }).review.put({ status: 'approved', comment: reviewComment }));
+                    const score = Number(reviewScore);
+                    if (task?.score_enabled && (reviewScore.trim() === '' || !Number.isInteger(score) || score < 0 || score > 100)) {
+                      toastError(new Error('分数必须是 0 到 100 的整数。'));
+                      return;
+                    }
+                    await unwrapResponse(createApiClient().teacher.records({ id: reviewRecord.id }).review.put({
+                      status: 'approved',
+                      comment: reviewComment,
+                      ...(task?.score_enabled ? { score } : {})
+                    }));
                     setReviewRecord(null);
                     await loadRecords();
                   }}>通过</Button>

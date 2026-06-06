@@ -47,6 +47,7 @@ export function createTask(input: CreatePracticeTaskInput) {
       startAt: input.start_at, endAt: input.end_at,
       minWords: input.min_words, minImages: input.min_images,
       maxRecordsPerStudent: input.max_records_per_student,
+      scoreEnabled: input.score_enabled,
       createdById: input.created_by_id, createdAt
     }).run();
     const taskId = Number(inserted.lastInsertRowid);

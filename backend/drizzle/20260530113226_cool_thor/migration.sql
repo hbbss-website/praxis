@@ -46,6 +46,7 @@ CREATE TABLE `practice_records` (
 	`cover_image_path` text,
 	`status` text NOT NULL,
 	`teacher_comment` text,
+	`score` integer,
 	`created_at` text NOT NULL,
 	CONSTRAINT `fk_practice_records_task_id_practice_tasks_id_fk` FOREIGN KEY (`task_id`) REFERENCES `practice_tasks`(`id`) ON DELETE CASCADE,
 	CONSTRAINT `fk_practice_records_student_id_users_id_fk` FOREIGN KEY (`student_id`) REFERENCES `users`(`id`)
@@ -69,6 +70,7 @@ CREATE TABLE `practice_tasks` (
 	`min_words` integer DEFAULT 0 NOT NULL,
 	`min_images` integer DEFAULT 0 NOT NULL,
 	`max_records_per_student` integer DEFAULT 1 NOT NULL,
+	`score_enabled` integer DEFAULT false NOT NULL,
 	`created_by_id` integer NOT NULL,
 	`created_at` text NOT NULL,
 	CONSTRAINT `fk_practice_tasks_created_by_id_users_id_fk` FOREIGN KEY (`created_by_id`) REFERENCES `users`(`id`)
@@ -112,6 +114,7 @@ CREATE INDEX `notifications_created_at_idx` ON `notifications` (`created_at`);--
 CREATE INDEX `practice_records_task_idx` ON `practice_records` (`task_id`);--> statement-breakpoint
 CREATE INDEX `practice_records_student_idx` ON `practice_records` (`student_id`);--> statement-breakpoint
 CREATE INDEX `practice_records_task_student_idx` ON `practice_records` (`task_id`,`student_id`);--> statement-breakpoint
+CREATE INDEX `practice_records_task_score_idx` ON `practice_records` (`task_id`,`score`);--> statement-breakpoint
 CREATE INDEX `practice_records_cover_image_path_idx` ON `practice_records` (`cover_image_path`);--> statement-breakpoint
 CREATE INDEX `practice_records_status_idx` ON `practice_records` (`status`);--> statement-breakpoint
 CREATE INDEX `practice_records_practice_date_idx` ON `practice_records` (`practice_date`);--> statement-breakpoint

@@ -275,6 +275,7 @@ export const studentRoutes = new Hono<AppBindings>()
     if (record.status === 'rejected') {
       updates.status = 'pending';
       updates.teacher_comment = null;
+      updates.score = null;
     }
 
     try {

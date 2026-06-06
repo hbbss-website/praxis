@@ -131,6 +131,7 @@ function buildTaskPayload(body: {
   min_words?: number;
   min_images?: number;
   max_records_per_student?: number;
+  score_enabled?: boolean;
   class_ids?: number[];
 }) {
   const title = body.title?.trim();
@@ -146,6 +147,7 @@ function buildTaskPayload(body: {
     min_words: body.min_words,
     min_images: body.min_images,
     max_records_per_student: body.max_records_per_student,
+    score_enabled: body.score_enabled,
     class_ids: body.class_ids
   };
 }
@@ -203,6 +205,30 @@ function validateRecordImages(imagePaths: string[], coverImagePath: string | nul
   return null;
 }
 
+function validateReviewScore({
+  status,
+  score,
+  scoreEnabled
+}: {
+  status: 'approved' | 'pending' | 'rejected';
+  score: number | undefined;
+  scoreEnabled: boolean;
+}) {
+  if (!scoreEnabled) {
+    return score === undefined ? null : '该任务未启用打分。';
+  }
+
+  if (status !== 'approved') {
+    return null;
+  }
+
+  if (score === undefined || !Number.isInteger(score) || score < 0 || score > 100) {
+    return '分数必须是 0 到 100 的整数。';
+  }
+
+  return null;
+}
+
 export const teacherRoutes = new Hono<AppBindings>()
   .use('/teacher/*', authMiddleware)
   .use('/teacher/*', async (c, next) => {
@@ -243,6 +269,7 @@ export const teacherRoutes = new Hono<AppBindings>()
       min_words: body.min_words,
       min_images: body.min_images,
       max_records_per_student: body.max_records_per_student,
+      score_enabled: body.score_enabled,
       class_ids: body.class_ids,
       created_by_id: user.id
     });
@@ -380,7 +407,7 @@ export const teacherRoutes = new Hono<AppBindings>()
     const visibleStudentIds = getVisibleStudentIds(user.id, user.role);
     const records = database.getRecordsForExport({ task_id: id, class_ids: body.class_ids }, visibleStudentIds);
     const csv = formatCsv([
-      ['任务名称', '班级', '学生姓名', '学生 UID', '记录标题', '实践日期', '时长', '地点', '状态', '教师评语', '提交时间', '正文', '图片数量'],
+      ['任务名称', '班级', '学生姓名', '学生 UID', '记录标题', '实践日期', '时长', '地点', '状态', '分数', '教师评语', '提交时间', '正文', '图片数量'],
       ...records.map((record) => [
         task.title,
         record.class_label,
@@ -391,6 +418,7 @@ export const teacherRoutes = new Hono<AppBindings>()
         record.duration,
         record.location,
         record.status,
+        record.score ?? '',
         record.teacher_comment,
         record.created_at,
         record.content,
@@ -427,7 +455,11 @@ export const teacherRoutes = new Hono<AppBindings>()
     }
 
     return c.json({
-      records: database.getAllRecords(parseRecordFilters(query as Record<string, unknown>), getVisibleStudentIds(user.id, user.role))
+      records: database.getAllRecords(
+        parseRecordFilters(query as Record<string, unknown>),
+        getVisibleStudentIds(user.id, user.role),
+        query.sort ?? 'created_at_desc'
+      )
     });
   })
   .get('/teacher/records/:id', zValidator('param', recordIdParamSchema, validationHook), (c) => {
@@ -453,9 +485,16 @@ export const teacherRoutes = new Hono<AppBindings>()
     const body = c.req.valid('json');
     const user = c.get('user')!;
     const record = database.getTeacherRecordById(id, getVisibleStudentIds(user.id, user.role));
+    const task = record?.task_id ? database.getManageableTaskById(record.task_id, getVisibleClassIds(user.id, user.role)) : null;
 
     if (!record) {
       return apiError(c, 404, '记录不存在。');
+    }
+
+    const scoreError = validateReviewScore({ status: body.status, score: body.score, scoreEnabled: Boolean(task?.score_enabled) });
+
+    if (scoreError) {
+      return apiError(c, 400, scoreError);
     }
 
     const comment = normalizeOptionalString(body.comment);
@@ -467,7 +506,8 @@ export const teacherRoutes = new Hono<AppBindings>()
 
     const updated = database.updateRecord(record.id, {
       status: body.status,
-      teacher_comment: comment
+      teacher_comment: comment,
+      score: body.status === 'approved' ? body.score ?? null : null
     });
 
     if (!updated) {
@@ -499,9 +539,16 @@ export const teacherRoutes = new Hono<AppBindings>()
         database.deleteRecord(record.id, record.image_paths);
         database.createNotification(record.student_id, 'deleted', `你的实践记录 "${record.title}" 已被删除。`);
       } else {
+        const task = record.task_id ? database.getManageableTaskById(record.task_id, getVisibleClassIds(user.id, user.role)) : null;
+
+        if (body.action === 'approved' && task?.score_enabled) {
+          return apiError(c, 400, '启用打分的任务不能批量通过。');
+        }
+
         database.updateRecord(record.id, {
           status: body.action,
-          teacher_comment: null
+          teacher_comment: null,
+          score: null
         });
         database.createNotification(
           record.student_id,
