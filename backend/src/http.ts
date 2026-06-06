@@ -5,7 +5,7 @@ import { appConfig } from './config';
 import type { PublicUser, RecordFilters, RecordSort, RecordStatus, UserRole } from './models';
 import { MAX_RECORD_IMAGES, notificationTypes, recordStatuses, userRoles } from './models';
 import type { AppBindings } from './plugins/auth';
-import { getZonedDateString } from './time';
+import { getUtcDateString } from './time';
 
 const positiveIdPattern = /^[1-9]\d*$/;
 const uploadPathPattern = /^\/uploads\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -339,15 +339,20 @@ export function validatePracticeDate(value: string) {
     return '实践日期格式无效。';
   }
 
-  const timestamp = Date.parse(value);
+  const parts = value.split('-').map(Number);
+  const parsed = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
 
-  if (!Number.isFinite(timestamp)) {
+  if (
+    parsed.getUTCFullYear() !== parts[0] ||
+    parsed.getUTCMonth() + 1 !== parts[1] ||
+    parsed.getUTCDate() !== parts[2]
+  ) {
     return '实践日期格式无效。';
   }
 
-  const localToday = getZonedDateString();
+  const today = getUtcDateString();
 
-  if (value > localToday) {
+  if (value > today) {
     return '不能记录未来的活动。';
   }
 
@@ -388,12 +393,21 @@ export function validateDuration(duration: number) {
 }
 
 export function validateDateTimeInput(value: string) {
-  return Number.isFinite(Date.parse(value));
+  return parseDateTimeInput(value) !== null;
 }
 
 export function parseDateTimeInput(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
+    return null;
+  }
+
   const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+  if (!Number.isFinite(timestamp)) {
+    return null;
+  }
+
+  const iso = new Date(timestamp).toISOString();
+  return iso === value ? iso : null;
 }
 
 export function validateTaskTitle(title: string) {
@@ -409,14 +423,15 @@ export function validateTaskDescription(description: string | null) {
 }
 
 export function validateRecordFilters(query: Record<string, unknown>) {
-  const dateFields = [
-    'practice_after',
-    'practice_before',
-    'created_after',
-    'created_before'
-  ] as const;
+  for (const field of ['practice_after', 'practice_before'] as const) {
+    const value = query[field];
 
-  for (const field of dateFields) {
+    if (typeof value === 'string' && value && !dateOnlyPattern.test(value)) {
+      return '筛选日期格式无效。';
+    }
+  }
+
+  for (const field of ['created_after', 'created_before'] as const) {
     const value = query[field];
 
     if (typeof value === 'string' && value && !validateDateTimeInput(value)) {

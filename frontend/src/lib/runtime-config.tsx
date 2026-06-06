@@ -7,8 +7,9 @@ const defaultRuntimeConfig: AppRuntimeConfig = {
   site_name: 'Praxis',
   icp_beian: '',
   upload_image_max_size_bytes: 5 * 1024 * 1024,
-  timezone: 'UTC+8',
-  is_production: false
+  is_production: false,
+  server_timestamp: Date.now(),
+  client_time_offset_ms: 0
 };
 
 const RuntimeConfigContext = createContext(defaultRuntimeConfig);
@@ -21,7 +22,12 @@ export function RuntimeConfigProvider({ children }: { children: ReactNode }) {
 
     getRuntimeConfig()
       .then((nextConfig) => {
-        if (active) setConfig(nextConfig);
+        if (active) {
+          setConfig({
+            ...nextConfig,
+            client_time_offset_ms: Date.now() - nextConfig.server_timestamp
+          });
+        }
       })
       .catch(() => {
       });

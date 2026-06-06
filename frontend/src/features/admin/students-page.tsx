@@ -54,6 +54,7 @@ export function AdminStudentsPage() {
 function AdminStudentListPage() {
   const { signOut } = useSession();
   const runtimeConfig = useRuntimeConfig();
+  const clientOffsetMs = runtimeConfig.client_time_offset_ms;
   const { captureShiftKey, resetSelectionAnchor, updateSelection } = useShiftMultiSelect();
   const [students, setStudents] = useState<StudentWithClassSummary[]>([]);
   const [classes, setClasses] = useState<ClassSummary[]>([]);
@@ -197,7 +198,7 @@ function AdminStudentListPage() {
     {
       accessorKey: 'created_at',
       header: '创建时间',
-      cell: ({ row }) => <span className="text-muted-foreground">{formatDateTime(row.original.created_at)}</span>
+      cell: ({ row }) => <span className="text-muted-foreground">{formatDateTime(row.original.created_at, '-', clientOffsetMs)}</span>
     },
     {
       id: 'actions',
@@ -220,7 +221,7 @@ function AdminStudentListPage() {
         </div>
       )
     }
-  ], [allSelected, captureShiftKey, durations, selectedStudentIdSet, sortBy, studentIds, updateSelection]);
+  ], [allSelected, captureShiftKey, durations, clientOffsetMs, selectedStudentIdSet, sortBy, studentIds, updateSelection]);
 
   return (
     <AdminPageFrame title="学生列表">

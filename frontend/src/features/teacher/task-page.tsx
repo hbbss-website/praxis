@@ -6,24 +6,28 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { ConfirmActionDialog } from '@/components/confirm-action-dialog';
 import { DataTable } from '@/components/data-table';
 import { DateRangePickerField } from '@/shared/date-picker-field';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiResponseError, createApiClient, unwrapResponse } from '@/lib/api';
 import { useSession } from '@/lib/auth';
 import { toastError, toastSuccess } from '@/lib/feedback';
-import { formatDateTime } from '@/lib/format';
+import { formatDate, formatDateTime, localDateBoundaryIso } from '@/lib/format';
+import { useRuntimeConfig } from '@/lib/runtime-config';
 import type { ClassSummary, PracticeTaskDetail, StudentWithClassSummary, TeacherRecord, TeacherRecordSummary } from '@/lib/types';
-import { defaultFilters, ErrorCard, Field, LoadingCard, PageFrame, RecordPreview, SortButton, StatusBadge, StudentMultiCombobox, toStudentOption, UserMultiCombobox } from './shared';
+import { cn } from '@/lib/utils';
+import { defaultFilters, Field, PageFrame, RecordPreview, SortButton, StatusBadge, StudentMultiCombobox, toStudentOption, UserMultiCombobox } from './shared';
 import { formToPayload, taskToForm, TaskFormDialog, type TaskFormState } from './task-form';
 
 export function TeacherTaskPage() {
   const { id } = useParams();
   const taskId = Number(id);
   const { signOut, user } = useSession();
+  const { client_time_offset_ms: clientOffsetMs } = useRuntimeConfig();
   const navigate = useNavigate();
   const basePath = user?.role === 'admin' ? '/admin/tasks' : '/teacher/tasks';
   const [task, setTask] = useState<PracticeTaskDetail | null>(null);
@@ -82,8 +86,8 @@ export function TeacherTaskPage() {
           status: filters.status ? (filters.status as 'approved' | 'pending' | 'rejected') : undefined,
           practice_after: filters.practice_after || undefined,
           practice_before: filters.practice_before || undefined,
-          created_after: filters.created_after ? new Date(filters.created_after).toISOString() : undefined,
-          created_before: filters.created_before ? new Date(`${filters.created_before}T23:59:59.999`).toISOString() : undefined,
+          created_after: filters.created_after ? localDateBoundaryIso(filters.created_after, 'start', clientOffsetMs) : undefined,
+          created_before: filters.created_before ? localDateBoundaryIso(filters.created_before, 'end', clientOffsetMs) : undefined,
           sort: sortBy
         }
       }));
@@ -105,7 +109,7 @@ export function TeacherTaskPage() {
 
   useEffect(() => {
     void loadRecords();
-  }, [taskId, filters, sortBy]);
+  }, [taskId, filters, sortBy, clientOffsetMs]);
 
   const loadClassOptions = useCallback(async (query: string) => {
     const normalized = query.trim().toLowerCase();
@@ -133,7 +137,11 @@ export function TeacherTaskPage() {
       { accessorKey: 'student_name', header: '学生' },
       { accessorKey: 'student_uid', header: 'UID' },
       { accessorKey: 'title', header: '标题' },
-      { accessorKey: 'practice_date', header: '实践日期' },
+      {
+        accessorKey: 'practice_date',
+        header: '实践日期',
+        cell: ({ row }) => formatDate(row.original.practice_date)
+      },
       { accessorKey: 'status', header: '状态', cell: ({ row }) => <StatusBadge status={row.original.status} /> }
     ];
 
@@ -163,7 +171,7 @@ export function TeacherTaskPage() {
             onClick={() => setSortBy('created_at_desc')}
           />
         ),
-        cell: ({ row }) => formatDateTime(row.original.created_at)
+        cell: ({ row }) => formatDateTime(row.original.created_at, '-', clientOffsetMs)
       },
       {
         id: 'actions',
@@ -180,75 +188,95 @@ export function TeacherTaskPage() {
     );
 
     return baseColumns;
-  }, [sortBy, task?.score_enabled]);
+  }, [sortBy, task?.score_enabled, clientOffsetMs]);
 
   return (
     <PageFrame
       title={task?.title ?? '任务详情'}
-      description={task ? `开始：${formatDateTime(task.start_at)}，截止：${formatDateTime(task.end_at)}` : ''}
       action={task ? (
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => { void loadTask(); void loadRecords(); }}><RefreshCw className="size-4" />刷新</Button>
-          <Button variant="outline" onClick={() => { setForm(taskToForm(task)); setFormOpen(true); }}><Edit className="size-4" />编辑</Button>
+          <Button variant="outline" onClick={() => { setForm(taskToForm(task, clientOffsetMs)); setFormOpen(true); }}><Edit className="size-4" />编辑</Button>
           <Button variant="destructive" onClick={() => setDeleteOpen(true)}><Trash2 className="size-4" />删除</Button>
         </div>
       ) : null}
     >
       {loading ? (
-        <LoadingCard label="正在加载任务..." />
+        <TaskPageLoading label="正在加载任务..." />
       ) : error ? (
-        <ErrorCard message={error} onRetry={() => void loadTask()} />
+        <TaskPageError message={error} onRetry={() => void loadTask()} />
       ) : task ? (
-        <div className="space-y-5">
-          <Card>
-            <CardContent className="space-y-4">
-              {task.description ? <p className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{task.description}</p> : null}
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {task.classes.map((item) => (
-                  <div key={item.id} className="rounded-3xl bg-muted px-3 py-2">
-                    <p className="truncate text-sm">{item.name}</p>
-                  </div>
-                ))}
+        <div className="space-y-8">
+          <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
+            <div className="min-w-0 space-y-6">
+              {task.description ? (
+                <div className="space-y-2">
+                  <h2 className="text-sm font-semibold">任务简介</h2>
+                  <p className="max-w-5xl whitespace-pre-wrap text-sm leading-7 text-foreground/90">{task.description}</p>
+                </div>
+              ) : null}
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-semibold">覆盖班级</h2>
+                  <Badge variant="outline">{task.classes.length} 个班级</Badge>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {task.classes.map((item) => (
+                    <Badge key={item.id} variant="secondary" className="max-w-full truncate rounded-md px-2.5 py-1 text-sm font-normal">
+                      {item.name}
+                    </Badge>
+                  ))}
+                </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <dl className="grid content-start gap-4 rounded-2xl bg-muted/30 p-4 sm:grid-cols-3 lg:grid-cols-1">
+              <TaskMeta label="开始时间" value={formatDateTime(task.start_at, '-', clientOffsetMs)} />
+              <TaskMeta label="截止时间" value={formatDateTime(task.end_at, '-', clientOffsetMs)} />
+            </dl>
+          </section>
 
-          <Card>
-            <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <CardTitle>记录列表</CardTitle>
-              <Button size="sm" variant="secondary" onClick={() => { setExportClassIds([]); setExportOpen(true); }}><Download className="size-4" />导出</Button>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <UserMultiCombobox label="班级" value={filters.class_ids} loadOptions={loadClassOptions} onChange={(value) => setFilters((current) => ({ ...current, class_ids: value, student_ids: [] }))} />
-                <StudentMultiCombobox label="学生" value={filters.student_ids} loadOptions={searchStudents} onChange={(value) => setFilters((current) => ({ ...current, student_ids: value }))} />
-                <Field label="状态">
-                  <Select value={filters.status || '__all__'} onValueChange={(value) => setFilters((current) => ({ ...current, status: value === '__all__' ? '' : value }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">全部状态</SelectItem>
-                      <SelectItem value="pending">待审核</SelectItem>
-                      <SelectItem value="approved">已通过</SelectItem>
-                      <SelectItem value="rejected">已驳回</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="实践日期范围">
-                  <DateRangePickerField
-                    value={{ from: filters.practice_after, to: filters.practice_before }}
-                    onChange={(value) => setFilters((current) => ({ ...current, practice_after: value.from, practice_before: value.to }))}
-                  />
-                </Field>
-                <Field label="提交日期范围">
-                  <DateRangePickerField
-                    value={{ from: filters.created_after, to: filters.created_before }}
-                    onChange={(value) => setFilters((current) => ({ ...current, created_after: value.from, created_before: value.to }))}
-                  />
-                </Field>
+          <section className="space-y-4 border-t pt-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-bold">记录列表</h2>
+                <Badge variant="outline">{records.length} 条</Badge>
               </div>
-              {recordsLoading ? <LoadingCard label="正在加载记录..." /> : <DataTable columns={columns} data={records} pagination={{ pageSize: 50 }} />}
-            </CardContent>
-          </Card>
+              <Button size="sm" variant="secondary" onClick={() => { setExportClassIds([]); setExportOpen(true); }}><Download className="size-4" />导出</Button>
+            </div>
+            <fieldset className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <legend className="sr-only">筛选记录</legend>
+              <UserMultiCombobox label="班级" value={filters.class_ids} loadOptions={loadClassOptions} onChange={(value) => setFilters((current) => ({ ...current, class_ids: value, student_ids: [] }))} />
+              <StudentMultiCombobox label="学生" value={filters.student_ids} loadOptions={searchStudents} onChange={(value) => setFilters((current) => ({ ...current, student_ids: value }))} />
+              <Field label="状态">
+                <Select value={filters.status || '__all__'} onValueChange={(value) => setFilters((current) => ({ ...current, status: value === '__all__' ? '' : value }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">全部状态</SelectItem>
+                    <SelectItem value="pending">待审核</SelectItem>
+                    <SelectItem value="approved">已通过</SelectItem>
+                    <SelectItem value="rejected">已驳回</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="实践日期范围">
+                <DateRangePickerField
+                  value={{ from: filters.practice_after, to: filters.practice_before }}
+                  onChange={(value) => setFilters((current) => ({ ...current, practice_after: value.from, practice_before: value.to }))}
+                />
+              </Field>
+              <Field label="提交日期范围">
+                <DateRangePickerField
+                  value={{ from: filters.created_after, to: filters.created_before }}
+                  onChange={(value) => setFilters((current) => ({ ...current, created_after: value.from, created_before: value.to }))}
+                />
+              </Field>
+            </fieldset>
+            {recordsLoading ? (
+              <TaskPageLoading compact label="正在加载记录..." />
+            ) : (
+              <DataTable className="rounded-2xl bg-background ring-border/70" columns={columns} data={records} pagination={{ pageSize: 50 }} />
+            )}
+          </section>
         </div>
       ) : null}
 
@@ -258,6 +286,7 @@ export function TeacherTaskPage() {
           title="编辑任务"
           classes={classes}
           form={form}
+          clientOffsetMs={clientOffsetMs}
           onOpenChange={setFormOpen}
           onFormChange={setForm}
           lockedClassIds={task.classes.map((item) => item.id)}
@@ -273,7 +302,7 @@ export function TeacherTaskPage() {
           onSubmit={async () => {
             if (!task) return;
             try {
-              const { score_enabled: _scoreEnabled, ...payload } = formToPayload(form);
+              const { score_enabled: _scoreEnabled, ...payload } = formToPayload(form, clientOffsetMs);
               await unwrapResponse(createApiClient().teacher.tasks({ id: task.id }).put(payload));
               toastSuccess('任务已更新。');
               setFormOpen(false);
@@ -404,5 +433,32 @@ export function TeacherTaskPage() {
         </DialogContent>
       </Dialog>
     </PageFrame>
+  );
+}
+
+function TaskMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-1 truncate text-sm font-semibold">{value}</dd>
+    </div>
+  );
+}
+
+function TaskPageLoading({ label, compact = false }: { label: string; compact?: boolean }) {
+  return (
+    <div className={cn(compact ? 'min-h-36' : 'min-h-52', 'flex items-center justify-center gap-3 rounded-2xl bg-muted/30 text-sm text-muted-foreground')}>
+      <Spinner />
+      {label}
+    </div>
+  );
+}
+
+function TaskPageError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex min-h-52 flex-col items-center justify-center gap-4 rounded-2xl bg-muted/30 text-center">
+      <p className="text-sm text-destructive">{message}</p>
+      <Button variant="secondary" onClick={onRetry}>重新加载</Button>
+    </div>
   );
 }

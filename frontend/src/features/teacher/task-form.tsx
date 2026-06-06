@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { DateTimePickerField } from '@/shared/date-picker-field';
+import { dateTimeInputValueToIso, formatDateTimeInputValue, getServerUtcDateInputValue } from '@/lib/format';
 import type { ClassSummary, PracticeTaskDetail } from '@/lib/types';
 import { Field, UserMultiCombobox } from './shared';
 
@@ -33,22 +34,20 @@ export const emptyTaskForm: TaskFormState = {
   class_ids: []
 };
 
-export function toLocalMinute(value: string) {
-  if (!value) return '';
-  const date = new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 16) : '';
+export function toLocalMinute(value: string, clientOffsetMs = 0) {
+  return formatDateTimeInputValue(value, clientOffsetMs);
 }
 
-export function fromLocalMinute(value: string) {
-  return value ? new Date(value).toISOString() : '';
+export function fromLocalMinute(value: string, clientOffsetMs = 0) {
+  return dateTimeInputValueToIso(value, clientOffsetMs);
 }
 
-export function taskToForm(task: PracticeTaskDetail): TaskFormState {
+export function taskToForm(task: PracticeTaskDetail, clientOffsetMs = 0): TaskFormState {
   return {
     title: task.title,
     description: task.description ?? '',
-    start_at: toLocalMinute(task.start_at),
-    end_at: toLocalMinute(task.end_at),
+    start_at: toLocalMinute(task.start_at, clientOffsetMs),
+    end_at: toLocalMinute(task.end_at, clientOffsetMs),
     min_words: String(task.min_words),
     min_images: String(task.min_images),
     max_records_per_student: String(task.max_records_per_student),
@@ -57,12 +56,12 @@ export function taskToForm(task: PracticeTaskDetail): TaskFormState {
   };
 }
 
-export function formToPayload(form: TaskFormState) {
+export function formToPayload(form: TaskFormState, clientOffsetMs = 0) {
   return {
     title: form.title.trim(),
     description: form.description.trim() || null,
-    start_at: fromLocalMinute(form.start_at),
-    end_at: fromLocalMinute(form.end_at),
+    start_at: fromLocalMinute(form.start_at, clientOffsetMs),
+    end_at: fromLocalMinute(form.end_at, clientOffsetMs),
     min_words: Number(form.min_words),
     min_images: Number(form.min_images),
     max_records_per_student: Number(form.max_records_per_student),
@@ -80,6 +79,7 @@ export function TaskFormDialog({
   onFormChange,
   lockedClassIds = [],
   showScoreEnabled = false,
+  clientOffsetMs = 0,
   onRemoveClassRequest,
   onSubmit
 }: {
@@ -91,10 +91,14 @@ export function TaskFormDialog({
   onFormChange: (form: TaskFormState) => void;
   lockedClassIds?: number[];
   showScoreEnabled?: boolean;
+  clientOffsetMs?: number;
   onRemoveClassRequest?: (targetClasses: ClassSummary[]) => void;
   onSubmit: () => Promise<void>;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const selectedClassOptions = useMemo(() => classes
+    .filter((item) => form.class_ids.includes(item.id))
+    .map((item) => ({ label: item.name, value: String(item.id) })), [classes, form.class_ids]);
   const loadClassOptions = useCallback(async (query: string) => {
     const normalized = query.trim().toLowerCase();
     return classes
@@ -120,8 +124,8 @@ export function TaskFormDialog({
           <Field label="任务名称"><Input value={form.title} onChange={(event) => onFormChange({ ...form, title: event.target.value })} required /></Field>
           <Field label="任务说明"><Textarea value={form.description} onChange={(event) => onFormChange({ ...form, description: event.target.value })} /></Field>
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="开始时间"><DateTimePickerField value={form.start_at} onChange={(value) => onFormChange({ ...form, start_at: value })} required /></Field>
-            <Field label="截止时间"><DateTimePickerField value={form.end_at} onChange={(value) => onFormChange({ ...form, end_at: value })} required /></Field>
+            <Field label="开始时间"><DateTimePickerField value={form.start_at} defaultDate={getServerUtcDateInputValue(clientOffsetMs)} onChange={(value) => onFormChange({ ...form, start_at: value })} required /></Field>
+            <Field label="截止时间"><DateTimePickerField value={form.end_at} defaultDate={getServerUtcDateInputValue(clientOffsetMs)} onChange={(value) => onFormChange({ ...form, end_at: value })} required /></Field>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             <Field label="最少字数"><Input type="number" min="0" value={form.min_words} onChange={(event) => onFormChange({ ...form, min_words: event.target.value })} /></Field>
@@ -129,16 +133,14 @@ export function TaskFormDialog({
             <Field label="每人最多记录数"><Input type="number" min="1" value={form.max_records_per_student} onChange={(event) => onFormChange({ ...form, max_records_per_student: event.target.value })} /></Field>
           </div>
           {showScoreEnabled ? (
-            <Field label="打分">
-              <label className="flex items-center gap-2 text-sm">
-                <Switch checked={form.score_enabled} onCheckedChange={(checked) => onFormChange({ ...form, score_enabled: checked })} />
-                启用打分
-              </label>
+            <Field label="启用打分">
+              <Switch checked={form.score_enabled} onCheckedChange={(checked) => onFormChange({ ...form, score_enabled: checked })} />
             </Field>
           ) : null}
           <UserMultiCombobox
             label="班级"
             value={form.class_ids}
+            selectedOptions={selectedClassOptions}
             loadOptions={loadClassOptions}
             onChange={(value) => {
               const removedClassIds = lockedClassIds.filter((classId) => !value.includes(classId));

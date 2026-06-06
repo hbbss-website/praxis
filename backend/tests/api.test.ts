@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCipheriv, randomBytes } from 'node:crypto';
@@ -31,7 +31,6 @@ fs.writeFileSync(testConfigPath, [
   'upload_image_max_size_bytes = 5242880',
   'temp_upload_ttl_ms = 1800000',
   'temp_upload_cleanup_interval_ms = 5000',
-  'timezone = "UTC+8"',
   'trust_proxy = true',
   'is_production = false',
   'cors_origins = []'
@@ -575,6 +574,34 @@ describe('route behavior', () => {
     expect(payload.site_name).toBe('Test Praxis');
     expect(payload.upload_image_max_size_bytes).toBe(5 * 1024 * 1024);
     expect(payload.is_production).toBe(false);
+    expect(payload.timezone).toBeUndefined();
+    expect(typeof payload.server_timestamp).toBe('number');
+  });
+
+  test('rejects task datetime values that are not strict UTC ISO', async () => {
+    await setNormalPassword('1', 'admin-pass-01');
+    const token = await loginAs('1', 'admin-pass-01');
+    const targetClass = database.createClass('任务时间校验班级');
+
+    const response = await jsonRequest('/api/teacher/tasks', {
+      title: '无效时间任务',
+      description: null,
+      start_at: '2099-01-01T00:00',
+      end_at: '2099-01-02T00:00:00.000Z',
+      min_words: 0,
+      min_images: 0,
+      max_records_per_student: 1,
+      score_enabled: false,
+      class_ids: [targetClass.id]
+    }, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    expect(response.status).toBe(400);
+    expect((await readJson(response)).error).toBe('开始时间无效。');
   });
 
   test('rejects malformed password envelopes in the backend', async () => {
@@ -805,6 +832,126 @@ describe('route behavior', () => {
 
     expect(response.status).toBe(400);
     expect((await readJson(response)).error).toBe('不能记录未来的活动。');
+  });
+
+  test('rejects invalid practice dates', async () => {
+    await setNormalPassword('3', 'student-pass-01');
+    const student = database.findUserByUid(3)!;
+    const task = createOpenTaskForStudent(student.id);
+    const token = await loginAs('3', 'student-pass-01');
+
+    const response = await jsonRequest('/api/students/me/records', {
+      title: '无效日期记录',
+      task_id: task.id,
+      content: '不应该允许',
+      practice_date: '2026-02-31',
+      location: '教室',
+      duration: '1.0',
+      image_paths: [],
+      cover_image_path: null
+    }, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    expect(response.status).toBe(400);
+    expect((await readJson(response)).error).toBe('实践日期格式无效。');
+  });
+
+  test('counts daily records using UTC day boundaries', async () => {
+    const student = await database.createUser('UTC 计数学生', 'student');
+
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date('2026-03-27T23:59:00.000Z'));
+      database.createRecord({
+        student_id: student.id,
+        title: 'UTC 前一天记录',
+        content: '不应该计入 UTC 今天。',
+        practice_date: '2026-03-27',
+        location: '教室',
+        duration: 1,
+        image_paths: [],
+        cover_image_path: null
+      });
+
+      vi.setSystemTime(new Date('2026-03-28T00:01:00.000Z'));
+      database.createRecord({
+        student_id: student.id,
+        title: 'UTC 当天记录',
+        content: '应该计入 UTC 今天。',
+        practice_date: '2026-03-28',
+        location: '教室',
+        duration: 1,
+        image_paths: [],
+        cover_image_path: null
+      });
+
+      vi.setSystemTime(new Date('2026-03-28T12:00:00.000Z'));
+      expect(database.countStudentRecordsToday(student.id)).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('keeps monthly overview buckets end-exclusive in UTC', async () => {
+    const student = await database.createUser('月度边界学生', 'student');
+    const targetClass = database.createClass('月度边界班级');
+    const monthStart = '2026-04-01T00:00:00.000Z';
+
+    database.assignStudentsToClass(targetClass.id, [student.id]);
+    database.createTask({
+      title: '月度边界任务',
+      description: null,
+      start_at: monthStart,
+      end_at: '2026-04-30T23:59:59.999Z',
+      min_words: 0,
+      min_images: 0,
+      max_records_per_student: 10,
+      score_enabled: false,
+      class_ids: [targetClass.id],
+      created_by_id: 1
+    });
+
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date(monthStart));
+      database.createRecord({
+        student_id: student.id,
+        title: '月度边界记录',
+        content: '刚好在 UTC 四月开始。',
+        practice_date: '2026-04-01',
+        location: '教室',
+        duration: 1,
+        image_paths: [],
+        cover_image_path: null
+      });
+
+      vi.setSystemTime(new Date('2026-04-15T00:00:00.000Z'));
+      const trend = database.getOverview(undefined, targetClass.id).trend;
+      const march = trend.find((item) => item.month === '2026-03');
+      const april = trend.find((item) => item.month === '2026-04');
+
+      expect(march).toMatchObject({ active_task_count: 0, submitted_record_count: 0 });
+      expect(april).toMatchObject({ active_task_count: 1, submitted_record_count: 1 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('rejects datetime values for practice date filters', async () => {
+    await setNormalPassword('1', 'admin-pass-01');
+    const token = await loginAs('1', 'admin-pass-01');
+    const response = await apiRequest(`/api/teacher/records?practice_after=${encodeURIComponent('2026-01-01T00:00:00.000Z')}`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    expect(response.status).toBe(400);
+    expect((await readJson(response)).error).toBe('筛选日期格式无效。');
   });
 
   test('resubmits rejected record as pending after student edit', async () => {
@@ -1249,6 +1396,8 @@ describe('route behavior', () => {
     expect(dataLine).toContain('"\'=cmd|""/c calc""!A0"');
     expect(dataLine).toContain('"\'@SUM(1+1)"');
     expect(dataLine).toContain('"88"');
+    expect(dataLine).toMatch(/"\d{4}-\d{2}-\d{2} \d{2}:\d{2}"/);
+    expect(dataLine).not.toMatch(/"\d{4}-\d{2}-\d{2}T/);
     expect(dataLine).toContain(`"${targetClass.name}"`);
     expect(dataLine).not.toContain(',"=cmd');
   });

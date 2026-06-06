@@ -4,6 +4,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 
 import type { CreateRecordInput, RecordFilters, RecordSort, StudentRecord, TeacherRecord, TeacherRecordExport, TeacherRecordSummary, UpdateRecordInput } from '../../models';
 import { MAX_RECORD_IMAGES } from '../../models';
+import { startOfUtcTodayIso } from '../../time';
 import { db } from '../client';
 import {
   nowIso, toPracticeRecord, practiceRecordColumns, serializeImagePaths,
@@ -202,12 +203,10 @@ export function deleteRecord(id: number, imagePaths?: string[]) {
 }
 
 export function countStudentRecordsToday(studentId: number) {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
   const row = db
     .select({ count: sql<number>`count(*)` })
     .from(practiceRecords)
-    .where(and(eq(practiceRecords.studentId, studentId), gte(practiceRecords.createdAt, start.toISOString())))
+    .where(and(eq(practiceRecords.studentId, studentId), gte(practiceRecords.createdAt, startOfUtcTodayIso())))
     .get();
   return toFiniteNumber(row?.count);
 }

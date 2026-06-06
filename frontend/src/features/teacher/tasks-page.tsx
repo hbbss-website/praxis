@@ -11,15 +11,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ApiResponseError, createApiClient, unwrapResponse } from '@/lib/api';
 import { useSession } from '@/lib/auth';
 import { toastError, toastSuccess } from '@/lib/feedback';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, getServerNowIso } from '@/lib/format';
+import { useRuntimeConfig } from '@/lib/runtime-config';
 import type { ClassSummary, PracticeTaskDetail, PracticeTaskSummary } from '@/lib/types';
 import { ErrorCard, LoadingCard, PageFrame } from './shared';
 import { emptyTaskForm, formToPayload, taskToForm, TaskFormDialog, type TaskFormState } from './task-form';
 
 type TaskTab = 'active' | 'upcoming' | 'ended';
 
-function getTaskTab(task: PracticeTaskSummary) {
-  const now = new Date().toISOString();
+function getTaskTab(task: PracticeTaskSummary, clientOffsetMs: number) {
+  const now = getServerNowIso(clientOffsetMs);
 
   if (now < task.start_at) return 'upcoming';
   if (now > task.end_at) return 'ended';
@@ -36,6 +37,7 @@ function sortTasks(tab: TaskTab, tasks: PracticeTaskSummary[]) {
 
 export function TeacherTasksPage() {
   const { signOut, user } = useSession();
+  const { client_time_offset_ms: clientOffsetMs } = useRuntimeConfig();
   const navigate = useNavigate();
   const basePath = user?.role === 'admin' ? '/admin/tasks' : '/teacher/tasks';
   const [tasks, setTasks] = useState<PracticeTaskSummary[]>([]);
@@ -77,16 +79,16 @@ export function TeacherTasksPage() {
   }, []);
 
   const grouped = useMemo(() => ({
-    active: sortTasks('active', tasks.filter((task) => getTaskTab(task) === 'active')),
-    upcoming: sortTasks('upcoming', tasks.filter((task) => getTaskTab(task) === 'upcoming')),
-    ended: sortTasks('ended', tasks.filter((task) => getTaskTab(task) === 'ended'))
-  }), [tasks]);
+    active: sortTasks('active', tasks.filter((task) => getTaskTab(task, clientOffsetMs) === 'active')),
+    upcoming: sortTasks('upcoming', tasks.filter((task) => getTaskTab(task, clientOffsetMs) === 'upcoming')),
+    ended: sortTasks('ended', tasks.filter((task) => getTaskTab(task, clientOffsetMs) === 'ended'))
+  }), [clientOffsetMs, tasks]);
 
   async function openEdit(taskId: number) {
     try {
       const data = await unwrapResponse<{ task: PracticeTaskDetail }>(createApiClient().teacher.tasks({ id: taskId }).get());
       setEditingTask(data.task);
-      setForm(taskToForm(data.task));
+      setForm(taskToForm(data.task, clientOffsetMs));
       setFormOpen(true);
     } catch (nextError) {
       if (nextError instanceof ApiResponseError && nextError.status === 401) {
@@ -118,9 +120,9 @@ export function TeacherTasksPage() {
             <TabsTrigger value="upcoming">未开始</TabsTrigger>
             <TabsTrigger value="ended">已结束</TabsTrigger>
           </TabsList>
-          <TaskList value="active" tasks={grouped.active} onOpen={(task) => navigate(`${basePath}/${task.id}`)} onEdit={openEdit} onDelete={setDeleteTarget} />
-          <TaskList value="upcoming" tasks={grouped.upcoming} onOpen={(task) => navigate(`${basePath}/${task.id}`)} onEdit={openEdit} onDelete={setDeleteTarget} />
-          <TaskList value="ended" tasks={grouped.ended} onOpen={(task) => navigate(`${basePath}/${task.id}`)} onEdit={openEdit} onDelete={setDeleteTarget} />
+          <TaskList value="active" tasks={grouped.active} clientOffsetMs={clientOffsetMs} onOpen={(task) => navigate(`${basePath}/${task.id}`)} onEdit={openEdit} onDelete={setDeleteTarget} />
+          <TaskList value="upcoming" tasks={grouped.upcoming} clientOffsetMs={clientOffsetMs} onOpen={(task) => navigate(`${basePath}/${task.id}`)} onEdit={openEdit} onDelete={setDeleteTarget} />
+          <TaskList value="ended" tasks={grouped.ended} clientOffsetMs={clientOffsetMs} onOpen={(task) => navigate(`${basePath}/${task.id}`)} onEdit={openEdit} onDelete={setDeleteTarget} />
         </Tabs>
       )}
 
@@ -129,6 +131,7 @@ export function TeacherTasksPage() {
         title={editingTask ? '编辑任务' : '创建任务'}
         classes={classes}
         form={form}
+        clientOffsetMs={clientOffsetMs}
         onOpenChange={setFormOpen}
         onFormChange={setForm}
         showScoreEnabled={!editingTask}
@@ -145,10 +148,10 @@ export function TeacherTasksPage() {
         onSubmit={async () => {
           try {
             if (editingTask) {
-              const { score_enabled: _scoreEnabled, ...payload } = formToPayload(form);
+              const { score_enabled: _scoreEnabled, ...payload } = formToPayload(form, clientOffsetMs);
               await unwrapResponse(createApiClient().teacher.tasks({ id: editingTask.id }).put(payload));
             } else {
-              await unwrapResponse(createApiClient().teacher.tasks.post(formToPayload(form)));
+              await unwrapResponse(createApiClient().teacher.tasks.post(formToPayload(form, clientOffsetMs)));
             }
             toastSuccess(editingTask ? '任务已更新。' : '任务已创建。');
             setFormOpen(false);
@@ -211,12 +214,14 @@ export function TeacherTasksPage() {
 function TaskList({
   value,
   tasks,
+  clientOffsetMs,
   onOpen,
   onEdit,
   onDelete
 }: {
   value: TaskTab;
   tasks: PracticeTaskSummary[];
+  clientOffsetMs: number;
   onOpen: (task: PracticeTaskSummary) => void;
   onEdit: (taskId: number) => Promise<void>;
   onDelete: (task: PracticeTaskSummary) => void;
@@ -242,9 +247,9 @@ function TaskList({
                     <Badge variant={task.pending_count > 0 ? 'destructive' : 'secondary'}>{task.pending_count} 待审核</Badge>
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                    <span>开始：{formatDateTime(task.start_at)}</span>
-                    <span>截止：{formatDateTime(task.end_at)}</span>
-                    <span>记录：{task.record_count}</span>
+                    <span>开始：{formatDateTime(task.start_at, '-', clientOffsetMs)}</span>
+                    <span>截止：{formatDateTime(task.end_at, '-', clientOffsetMs)}</span>
+                    <span>记录数：{task.record_count}</span>
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2" onClick={(event) => event.stopPropagation()}>

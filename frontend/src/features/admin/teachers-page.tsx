@@ -60,6 +60,7 @@ function UserListPage({
 }) {
   const { signOut } = useSession();
   const runtimeConfig = useRuntimeConfig();
+  const clientOffsetMs = runtimeConfig.client_time_offset_ms;
   const { captureShiftKey, resetSelectionAnchor, updateSelection } = useShiftMultiSelect();
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [classes, setClasses] = useState<ClassSummary[]>([]);
@@ -184,7 +185,7 @@ function UserListPage({
     {
       accessorKey: 'created_at',
       header: '创建时间',
-      cell: ({ row }) => <span className="text-muted-foreground">{formatDateTime(row.original.created_at)}</span>
+      cell: ({ row }) => <span className="text-muted-foreground">{formatDateTime(row.original.created_at, '-', clientOffsetMs)}</span>
     },
     ...(role === 'teacher' ? [{
       id: 'classes',
@@ -222,7 +223,7 @@ function UserListPage({
         </div>
       )
     }
-  ], [allSelected, captureShiftKey, role, selectedUserIdSet, sortBy, teacherClassMap, updateSelection, userIds]);
+  ], [allSelected, captureShiftKey, role, clientOffsetMs, selectedUserIdSet, sortBy, teacherClassMap, updateSelection, userIds]);
 
   return (
     <AdminPageFrame title={title}>

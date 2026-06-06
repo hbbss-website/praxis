@@ -19,7 +19,6 @@ export interface AppConfig {
   upload_image_max_size_bytes: number;
   temp_upload_ttl_ms: number;
   temp_upload_cleanup_interval_ms: number;
-  timezone: string;
   trust_proxy: boolean;
   is_production: boolean;
   cors_origins: string[];
@@ -99,7 +98,6 @@ function createDefaultConfig(): AppConfig {
     upload_image_max_size_bytes: 5 * 1024 * 1024,
     temp_upload_ttl_ms: 30 * 60 * 1000,
     temp_upload_cleanup_interval_ms: 5000,
-    timezone: "UTC+8",
     trust_proxy: false,
     is_production: false,
     cors_origins: [],
@@ -226,7 +224,6 @@ function normalizeConfig(source: unknown): AppConfig {
       "temp_upload_cleanup_interval_ms",
       fallback.temp_upload_cleanup_interval_ms,
     ),
-    timezone: getString(config, "timezone", fallback.timezone),
     trust_proxy: getBoolean(config, "trust_proxy", fallback.trust_proxy),
     is_production: getBoolean(config, "is_production", fallback.is_production),
     cors_origins: getStringArray(config, "cors_origins"),

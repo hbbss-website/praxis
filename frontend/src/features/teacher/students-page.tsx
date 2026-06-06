@@ -53,6 +53,7 @@ const defaultStudentSearch: ListSearchState<StudentSearchField> = { field: 'name
 export function TeacherStudentsPage() {
   const { signOut } = useSession();
   const runtimeConfig = useRuntimeConfig();
+  const clientOffsetMs = runtimeConfig.client_time_offset_ms;
   const { captureShiftKey, resetSelectionAnchor, updateSelection } = useShiftMultiSelect();
   const [students, setStudents] = useState<StudentWithClassSummary[]>([]);
   const [classes, setClasses] = useState<ClassSummary[]>([]);
@@ -199,7 +200,7 @@ export function TeacherStudentsPage() {
     {
       accessorKey: 'created_at',
       header: '创建时间',
-      cell: ({ row }) => <span className="text-muted-foreground">{formatDateTime(row.original.created_at)}</span>
+      cell: ({ row }) => <span className="text-muted-foreground">{formatDateTime(row.original.created_at, '-', clientOffsetMs)}</span>
     },
     {
       id: 'actions',
@@ -218,7 +219,7 @@ export function TeacherStudentsPage() {
         </Button>
       )
     }
-  ], [captureShiftKey, durations, selectedIds.length, selectedStudentIdSet, sortBy, sortedStudentIds, sortedStudents.length, updateSelection]);
+  ], [captureShiftKey, durations, clientOffsetMs, selectedIds.length, selectedStudentIdSet, sortBy, sortedStudentIds, sortedStudents.length, updateSelection]);
 
   return (
     <PageFrame title="学生列表">

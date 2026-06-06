@@ -54,7 +54,6 @@ pnpm start
 | `upload_webp_effort` | WebP 压缩力度（0–6） | `5` |
 | `temp_upload_ttl_ms` | 临时上传文件保留时间（毫秒） | `1800000`（30 分钟） |
 | `temp_upload_cleanup_interval_ms` | 临时文件清理间隔（毫秒） | `5000` |
-| `timezone` | 时区 | `"UTC+8"` |
 | `trust_proxy` | 是否信任反向代理转发地址 | `false` |
 | `is_production` | 生产模式，**生产环境请务必开启** | `false` |
 | `cors_origins` | 允许的 CORS 域名列表 | `[]` |

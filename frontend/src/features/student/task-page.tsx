@@ -11,7 +11,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ApiResponseError, createApiClient, unwrapResponse } from '@/lib/api';
 import { useSession } from '@/lib/auth';
 import { toastError, toastSuccess } from '@/lib/feedback';
-import { formatDate, formatDateTime, formatDuration } from '@/lib/format';
+import { formatDate, formatDateTime, formatDuration, getServerNowIso } from '@/lib/format';
+import { useRuntimeConfig } from '@/lib/runtime-config';
 import type { PracticeTaskSummary, StudentRecord } from '@/lib/types';
 import { ErrorCard, LoadingCard, StatusBadge, StudentPageFrame } from './shared';
 
@@ -19,6 +20,7 @@ export function StudentTaskPage() {
   const { id } = useParams();
   const taskId = Number(id);
   const { signOut } = useSession();
+  const { client_time_offset_ms: clientOffsetMs } = useRuntimeConfig();
   const navigate = useNavigate();
   const [task, setTask] = useState<PracticeTaskSummary | null>(null);
   const [records, setRecords] = useState<StudentRecord[]>([]);
@@ -51,13 +53,13 @@ export function StudentTaskPage() {
     void load();
   }, [taskId]);
 
-  const now = new Date().toISOString();
+  const now = getServerNowIso(clientOffsetMs);
   const canAdd = task ? now >= task.start_at && now <= task.end_at && records.length < task.max_records_per_student : false;
 
   return (
     <StudentPageFrame
       title={task?.title ?? '任务详情'}
-      description={task ? `开始：${formatDateTime(task.start_at)}，截止：${formatDateTime(task.end_at)}` : ''}
+      description={task ? `开始：${formatDateTime(task.start_at, '-', clientOffsetMs)}，截止：${formatDateTime(task.end_at, '-', clientOffsetMs)}` : ''}
       action={task && canAdd ? (
         <Button asChild>
           <Link to={`/student/tasks/${task.id}/upload`}>

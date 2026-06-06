@@ -18,11 +18,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { ApiResponseError, createApiClient, formatUploadImageMaxSize, getRuntimeConfig, unwrapResponse, uploadImage, validateUploadImageFiles } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/feedback';
 import { formatDate, formatDateTime, formatDuration, normalizeDateInputValue, notificationLabel, statusLabel } from '@/lib/format';
+import { useRuntimeConfig } from '@/lib/runtime-config';
 import { MAX_RECORD_IMAGES, type AppNotification, type RecordStatistics, type StudentRecord } from '@/lib/types';
 import { ErrorCard, LoadingCard, StudentPageFrame } from './shared';
 
 export function StudentNotificationsPage() {
   const { signOut, setNotificationCount } = useSession();
+  const { client_time_offset_ms: clientOffsetMs } = useRuntimeConfig();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -66,7 +68,7 @@ export function StudentNotificationsPage() {
                     </Badge>
                     {!notification.is_read ? <Badge variant="default">未读</Badge> : null}
                   </div>
-                  <p className="text-sm text-muted-foreground">{formatDateTime(notification.created_at)}</p>
+                  <p className="text-sm text-muted-foreground">{formatDateTime(notification.created_at, '-', clientOffsetMs)}</p>
                 </div>
                 <p className="text-sm leading-7 text-muted-foreground">{notification.message}</p>
               </CardContent>

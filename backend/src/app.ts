@@ -80,8 +80,8 @@ export const api = new Hono<AppBindings>()
     site_name: appConfig.site_name,
     icp_beian: appConfig.icp_beian,
     upload_image_max_size_bytes: appConfig.upload_image_max_size_bytes,
-    timezone: appConfig.timezone,
-    is_production: appConfig.is_production
+    is_production: appConfig.is_production,
+    server_timestamp: Date.now()
   }))
   .route('/auth', authRoutes)
   .route('/admin', adminRoutes)

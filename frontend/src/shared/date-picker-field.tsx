@@ -15,7 +15,9 @@ function toDate(value: string) {
 }
 
 function toDateText(date: Date | undefined) {
-  return date ? date.toLocaleDateString('sv-SE') : '';
+  return date
+    ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    : '';
 }
 
 function parseDateTimeValue(value: string) {
@@ -45,16 +47,17 @@ export function DatePickerField({
   const [open, setOpen] = useState(false);
   const normalizedValue = normalizeDateInputValue(value);
   const selectedDate = toDate(normalizedValue);
+  const hasValue = Boolean(normalizedValue);
 
   return (
     <div className={cn('relative w-full', className)}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" className="w-full justify-start gap-2 pr-16 text-left font-normal">
-            <span className={normalizedValue ? 'text-foreground' : 'text-muted-foreground'}>
+          <Button type="button" variant="outline" className={cn('relative w-full justify-start px-3 text-left font-normal', hasValue ? 'pr-16' : 'pr-10')}>
+            <span className={cn('min-w-0 flex-1 truncate', normalizedValue ? 'text-foreground' : 'text-muted-foreground')}>
               {normalizedValue || placeholder}
             </span>
-            <CalendarIcon className="ml-auto size-4 shrink-0" />
+            <CalendarIcon className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           </Button>
         </PopoverTrigger>
         {open ? (
@@ -63,14 +66,14 @@ export function DatePickerField({
               mode="single"
               selected={selectedDate}
               onSelect={(date) => {
-                onChange(date ? date.toLocaleDateString('sv-SE') : '');
+                onChange(toDateText(date));
                 setOpen(false);
               }}
             />
           </PopoverContent>
         ) : null}
       </Popover>
-      {normalizedValue ? (
+      {hasValue ? (
         <Button
           size="icon-sm"
           type="button"
@@ -90,12 +93,14 @@ export function DateTimePickerField({
   onChange,
   placeholder = '选择日期',
   required = false,
+  defaultDate,
   className
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   required?: boolean;
+  defaultDate?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -135,7 +140,7 @@ export function DateTimePickerField({
         required={required}
         onChange={(event) => {
           const nextTime = event.target.value;
-          onChange(toDateTimeValue(date || normalizeDateInputValue(new Date()), nextTime));
+          onChange(toDateTimeValue(date || defaultDate || normalizeDateInputValue(new Date()), nextTime));
         }}
         className="w-full border-input bg-background sm:w-32"
       />
@@ -160,6 +165,7 @@ export function DateRangePickerField({
   const [open, setOpen] = useState(false);
   const normalizedFrom = normalizeDateInputValue(value.from);
   const normalizedTo = normalizeDateInputValue(value.to);
+  const hasValue = Boolean(normalizedFrom || normalizedTo);
   const selectedRange: DateRange | undefined = normalizedFrom || normalizedTo ? {
     from: toDate(normalizedFrom),
     to: toDate(normalizedTo)
@@ -176,11 +182,11 @@ export function DateRangePickerField({
     <div className={cn('relative w-full', className)}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" className="w-full justify-start gap-2 pr-16 text-left font-normal">
-            <span className={normalizedFrom || normalizedTo ? 'text-foreground' : 'text-muted-foreground'}>
+          <Button type="button" variant="outline" className={cn('relative w-full justify-start px-3 text-left font-normal', hasValue ? 'pr-16' : 'pr-10')}>
+            <span className={cn('min-w-0 flex-1 truncate', hasValue ? 'text-foreground' : 'text-muted-foreground')}>
               {label}
             </span>
-            <CalendarIcon className="ml-auto size-4 shrink-0" />
+            <CalendarIcon className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           </Button>
         </PopoverTrigger>
         {open ? (
@@ -199,7 +205,7 @@ export function DateRangePickerField({
           </PopoverContent>
         ) : null}
       </Popover>
-      {normalizedFrom || normalizedTo ? (
+      {hasValue ? (
         <Button
           size="icon-sm"
           type="button"

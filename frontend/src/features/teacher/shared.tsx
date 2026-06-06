@@ -90,6 +90,8 @@ export interface StudentOption extends UserOption {
   class_name: string | null;
 }
 
+const emptyUserOptions: UserOption[] = [];
+
 export function toUserOption(user: Pick<UserSummary, 'id' | 'name' | 'uid'>): UserOption {
   return {
     label: `${user.name} (${user.uid})`,
@@ -240,11 +242,13 @@ export const FilterSelect = memo(function FilterSelect({
 export const UserMultiCombobox = memo(function UserMultiCombobox({
   label,
   value,
+  selectedOptions: initialSelectedOptions = emptyUserOptions,
   loadOptions,
   onChange
 }: {
   label: string;
   value: number[];
+  selectedOptions?: UserOption[];
   loadOptions: (query: string) => Promise<UserOption[]>;
   onChange: (value: number[]) => void;
 }) {
@@ -261,6 +265,16 @@ export const UserMultiCombobox = memo(function UserMultiCombobox({
   const [selectedOptionMap, setSelectedOptionMap] = useState(() => new Map<string, UserOption>());
   const [loading, setLoading] = useState(false);
   const selectedOptions = useMemo(() => value.map((id) => selectedOptionMap.get(String(id))).filter((option): option is UserOption => Boolean(option)), [selectedOptionMap, value]);
+
+  useEffect(() => {
+    setSelectedOptionMap((current) => {
+      const next = new Map(current);
+      for (const option of initialSelectedOptions) {
+        next.set(option.value, option);
+      }
+      return next;
+    });
+  }, [initialSelectedOptions]);
 
   useEffect(() => {
     let cancelled = false;

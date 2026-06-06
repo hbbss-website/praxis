@@ -8,14 +8,15 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ApiResponseError, createApiClient, unwrapResponse } from '@/lib/api';
 import { useSession } from '@/lib/auth';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, getServerNowIso } from '@/lib/format';
+import { useRuntimeConfig } from '@/lib/runtime-config';
 import type { PracticeTaskSummary } from '@/lib/types';
 import { ErrorCard, LoadingCard, StudentPageFrame } from './shared';
 
 type TaskTab = 'active' | 'upcoming' | 'ended';
 
-function getTaskTab(task: PracticeTaskSummary) {
-  const now = new Date().toISOString();
+function getTaskTab(task: PracticeTaskSummary, clientOffsetMs: number) {
+  const now = getServerNowIso(clientOffsetMs);
 
   if (now < task.start_at) return 'upcoming';
   if (now > task.end_at) return 'ended';
@@ -32,6 +33,7 @@ function sortTasks(tab: TaskTab, tasks: PracticeTaskSummary[]) {
 
 export function StudentDashboardPage() {
   const { signOut } = useSession();
+  const { client_time_offset_ms: clientOffsetMs } = useRuntimeConfig();
   const [tasks, setTasks] = useState<PracticeTaskSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,10 +61,10 @@ export function StudentDashboardPage() {
   }, []);
 
   const grouped = useMemo(() => ({
-    active: sortTasks('active', tasks.filter((task) => getTaskTab(task) === 'active')),
-    upcoming: sortTasks('upcoming', tasks.filter((task) => getTaskTab(task) === 'upcoming')),
-    ended: sortTasks('ended', tasks.filter((task) => getTaskTab(task) === 'ended'))
-  }), [tasks]);
+    active: sortTasks('active', tasks.filter((task) => getTaskTab(task, clientOffsetMs) === 'active')),
+    upcoming: sortTasks('upcoming', tasks.filter((task) => getTaskTab(task, clientOffsetMs) === 'upcoming')),
+    ended: sortTasks('ended', tasks.filter((task) => getTaskTab(task, clientOffsetMs) === 'ended'))
+  }), [clientOffsetMs, tasks]);
 
   return (
     <StudentPageFrame title="任务列表">
@@ -77,16 +79,16 @@ export function StudentDashboardPage() {
             <TabsTrigger value="upcoming">未开始</TabsTrigger>
             <TabsTrigger value="ended">已结束</TabsTrigger>
           </TabsList>
-          <TaskList value="active" tasks={grouped.active} />
-          <TaskList value="upcoming" tasks={grouped.upcoming} />
-          <TaskList value="ended" tasks={grouped.ended} />
+          <TaskList value="active" tasks={grouped.active} clientOffsetMs={clientOffsetMs} />
+          <TaskList value="upcoming" tasks={grouped.upcoming} clientOffsetMs={clientOffsetMs} />
+          <TaskList value="ended" tasks={grouped.ended} clientOffsetMs={clientOffsetMs} />
         </Tabs>
       )}
     </StudentPageFrame>
   );
 }
 
-function TaskList({ value, tasks }: { value: TaskTab; tasks: PracticeTaskSummary[] }) {
+function TaskList({ value, tasks, clientOffsetMs }: { value: TaskTab; tasks: PracticeTaskSummary[]; clientOffsetMs: number }) {
   return (
     <TabsContent value={value} className="mt-4">
       {tasks.length === 0 ? (
@@ -99,8 +101,8 @@ function TaskList({ value, tasks }: { value: TaskTab; tasks: PracticeTaskSummary
                 <div className="min-w-0 space-y-2">
                   <h2 className="truncate text-base font-bold">{task.title}</h2>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                    <span className="inline-flex items-center gap-1"><CalendarDays className="size-4" />开始：{formatDateTime(task.start_at)}</span>
-                    <span>截止：{formatDateTime(task.end_at)}</span>
+                    <span className="inline-flex items-center gap-1"><CalendarDays className="size-4" />开始：{formatDateTime(task.start_at, '-', clientOffsetMs)}</span>
+                    <span>截止：{formatDateTime(task.end_at, '-', clientOffsetMs)}</span>
                   </div>
                 </div>
                 <Button asChild>

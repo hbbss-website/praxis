@@ -10,15 +10,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import { ApiResponseError, createApiClient, formatUploadImageMaxSize, getRuntimeConfig, unwrapResponse, uploadImage, validateUploadImageFiles } from '@/lib/api';
+import { ApiResponseError, createApiClient, formatUploadImageMaxSize, unwrapResponse, uploadImage, validateUploadImageFiles } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/feedback';
-import { normalizeDateInputValue } from '@/lib/format';
+import { getServerUtcDateInputValue, normalizeDateInputValue } from '@/lib/format';
+import { useRuntimeConfig } from '@/lib/runtime-config';
 import { MAX_RECORD_IMAGES, type PracticeTaskSummary, type StudentRecord } from '@/lib/types';
 import { createLocalImageItem, type UploadImageItem } from './upload-types';
 import { ErrorCard, Field, LoadingCard, StudentPageFrame } from './shared';
 
 export function StudentUploadPage() {
   const { signOut } = useSession();
+  const runtimeConfig = useRuntimeConfig();
+  const uploadImageMaxSizeBytes = runtimeConfig.upload_image_max_size_bytes;
+  const defaultPracticeDate = getServerUtcDateInputValue(runtimeConfig.client_time_offset_ms);
   const navigate = useNavigate();
   const { taskId: taskIdParam } = useParams();
   const taskId = Number(taskIdParam);
@@ -27,24 +31,34 @@ export function StudentUploadPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [uploadImageMaxSizeBytes, setUploadImageMaxSizeBytes] = useState(5 * 1024 * 1024);
   const [task, setTask] = useState<PracticeTaskSummary | null>(null);
   const [images, setImages] = useState<UploadImageItem[]>([]);
   const [coverImageId, setCoverImageId] = useState('');
   const localPreviewUrls = useRef(new Set<string>());
+  const defaultPracticeDateRef = useRef(defaultPracticeDate);
   const [form, setForm] = useState({
     title: '',
     content: '',
-    practice_date: normalizeDateInputValue(new Date()),
+    practice_date: defaultPracticeDate,
     location: '',
     duration: ''
   });
 
   useEffect(() => {
-    getRuntimeConfig()
-      .then((config) => setUploadImageMaxSizeBytes(config.upload_image_max_size_bytes))
-      .catch(() => {});
-  }, []);
+    if (editId) {
+      defaultPracticeDateRef.current = defaultPracticeDate;
+      return;
+    }
+
+    setForm((current) => {
+      if (current.practice_date !== defaultPracticeDateRef.current) {
+        return current;
+      }
+
+      return { ...current, practice_date: defaultPracticeDate };
+    });
+    defaultPracticeDateRef.current = defaultPracticeDate;
+  }, [defaultPracticeDate, editId]);
 
   useEffect(() => {
     if (!Number.isInteger(taskId) || taskId <= 0) return;

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 
 import type { ClassOverview, OverviewData, RecordStatistics, StudentOverview, TeacherStatistics } from '../../models';
 import { appConfig } from '../../config';
@@ -7,7 +7,7 @@ import { buildRecordWhere, toFiniteNumber, nowIso } from '../helpers';
 import { classes, classStudents, classTeachers, practiceRecords, practiceTaskClasses, practiceTasks, users } from '../schema';
 import { getClasses } from './classes';
 import { getTeacherStudentIds } from './classes';
-import { recentZonedMonths, zonedMonthRangeIso } from '../../time';
+import { recentUtcMonths, utcMonthRangeIso } from '../../time';
 
 type ClassOverviewRow = {
   class_id: number;
@@ -173,15 +173,15 @@ export function getOverview(visibleClassIds?: Set<number>, selectedClassId: numb
 }
 
 function getOverviewTrend(classIds: number[]) {
-  const months = recentZonedMonths(12);
+  const months = recentUtcMonths(12);
   return months.map((month) => {
-    const range = zonedMonthRangeIso(month);
+    const range = utcMonthRangeIso(month);
     const classWhere = classIds.length > 0 ? inArray(practiceTaskClasses.classId, classIds) : sql`1 = 0`;
     const activeTaskRow = db
       .select({ count: sql<number>`count(distinct ${practiceTasks.id})` })
       .from(practiceTasks)
       .innerJoin(practiceTaskClasses, eq(practiceTaskClasses.taskId, practiceTasks.id))
-      .where(and(classWhere, lte(practiceTasks.startAt, range.end), gte(practiceTasks.endAt, range.start)))
+      .where(and(classWhere, lt(practiceTasks.startAt, range.end), gte(practiceTasks.endAt, range.start)))
       .get();
     const recordRow = db
       .select({ count: sql<number>`count(distinct ${practiceRecords.id})` })
@@ -190,7 +190,7 @@ function getOverviewTrend(classIds: number[]) {
       .where(and(
         classIds.length > 0 ? inArray(classStudents.classId, classIds) : sql`1 = 0`,
         gte(practiceRecords.createdAt, range.start),
-        lte(practiceRecords.createdAt, range.end)
+        lt(practiceRecords.createdAt, range.end)
       ))
       .get();
     return {

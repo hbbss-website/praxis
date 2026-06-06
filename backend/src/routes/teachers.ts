@@ -45,7 +45,7 @@ import {
 import { authMiddleware, type AppBindings } from '../plugins/auth';
 import type { RecordFilters, UpdateRecordInput, UserRole } from '../models';
 import { MAX_RECORD_IMAGES } from '../models';
-import { startOfTodayIso } from '../time';
+import { formatUtcDateTimeMinute, startOfUtcTodayIso } from '../time';
 
 const recordIdParamSchema = z.object({
   id: z.string().regex(/^[1-9]\d*$/)
@@ -118,8 +118,8 @@ function parseRecordFilters(query: Record<string, unknown>): RecordFilters {
     status: typeof query.status === 'string' ? query.status as RecordFilters['status'] : null,
     practice_after: typeof query.practice_after === 'string' && query.practice_after ? query.practice_after : null,
     practice_before: typeof query.practice_before === 'string' && query.practice_before ? query.practice_before : null,
-    created_after: typeof query.created_after === 'string' && query.created_after ? query.created_after : null,
-    created_before: typeof query.created_before === 'string' && query.created_before ? query.created_before : null
+    created_after: typeof query.created_after === 'string' && query.created_after ? parseDateTimeInput(query.created_after) : null,
+    created_before: typeof query.created_before === 'string' && query.created_before ? parseDateTimeInput(query.created_before) : null
   });
 }
 
@@ -178,7 +178,7 @@ function validateTaskPayload(payload: ReturnType<typeof buildTaskPayload>, curre
     return '开始时间不能晚于截止时间。';
   }
 
-  if (payload.end_at !== undefined && endAt < startOfTodayIso()) {
+  if (payload.end_at !== undefined && endAt < startOfUtcTodayIso()) {
     return '截止时间不能早于今天。';
   }
 
@@ -420,7 +420,7 @@ export const teacherRoutes = new Hono<AppBindings>()
         record.status,
         record.score ?? '',
         record.teacher_comment,
-        record.created_at,
+        formatUtcDateTimeMinute(record.created_at),
         record.content,
         record.image_count
       ])
