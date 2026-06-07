@@ -1,0 +1,30 @@
+export interface Env {
+  DB: D1Database;
+  UPLOADS: R2Bucket;
+  KV: KVNamespace;
+
+  JWT_SECRET: string;
+  JWT_ISSUER: string;
+  JWT_EXPIRES_IN: string;
+  IS_PRODUCTION: string;
+  SITE_NAME: string;
+  ICP_BEIAN: string;
+
+  LOGIN_MAX_ATTEMPTS: string;
+  LOGIN_LOCKOUT_MS: string;
+  UPLOAD_IMAGE_MAX_SIZE_BYTES: string;
+  TEMP_UPLOAD_TTL_MS: string;
+  RECORD_MAX_IMAGES: string;
+  MAX_DAILY_RECORDS: string;
+  OVERVIEW_CLASS_RANKING_LIMIT: string;
+  OVERVIEW_STUDENT_RANKING_LIMIT: string;
+  GENERATED_PASSWORD_LENGTH: string;
+  INITIAL_ADMIN_PASSWORD: string;
+  CSV_IMPORT_MAX_SIZE_BYTES: string;
+  USER_NAME_MAX_LENGTH: string;
+  TITLE_MAX_LENGTH: string;
+  CONTENT_MAX_LENGTH: string;
+  COMMENT_MAX_LENGTH: string;
+  LOCATION_MAX_LENGTH: string;
+  MAX_RECORD_DURATION: string;
+}

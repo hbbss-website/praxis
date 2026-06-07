@@ -1,0 +1,47 @@
+name = "praxis"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "frontend/dist"
+
+[vars]
+SITE_NAME = "Praxis"
+ICP_BEIAN = ""
+JWT_ISSUER = "praxis"
+JWT_EXPIRES_IN = "8h"
+IS_PRODUCTION = "true"
+LOGIN_MAX_ATTEMPTS = "5"
+LOGIN_LOCKOUT_MS = "900000"
+UPLOAD_IMAGE_MAX_SIZE_BYTES = "5242880"
+TEMP_UPLOAD_TTL_MS = "1800000"
+RECORD_MAX_IMAGES = "9"
+MAX_DAILY_RECORDS = "50"
+OVERVIEW_CLASS_RANKING_LIMIT = "30"
+OVERVIEW_STUDENT_RANKING_LIMIT = "30"
+GENERATED_PASSWORD_LENGTH = "8"
+INITIAL_ADMIN_PASSWORD = "12345678"
+CSV_IMPORT_MAX_SIZE_BYTES = "52428800"
+USER_NAME_MAX_LENGTH = "40"
+TITLE_MAX_LENGTH = "120"
+CONTENT_MAX_LENGTH = "5000"
+COMMENT_MAX_LENGTH = "500"
+LOCATION_MAX_LENGTH = "120"
+MAX_RECORD_DURATION = "24"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "praxis"
+database_id = "REPLACE_WITH_D1_ID"
+
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "praxis-uploads"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_KV_ID"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Secrets — run once before deploying:
+#   wrangler secret put JWT_SECRET

@@ -4,16 +4,16 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
-import { appConfig } from './backend/src/config';
-
-const backendTarget = `http://${appConfig.backend_host}:${appConfig.port}`;
+const backendTarget = process.env.BACKEND_TARGET ?? 'http://127.0.0.1:3000';
+const frontendHost = process.env.FRONTEND_HOST ?? '127.0.0.1';
+const frontendPort = Number(process.env.VITE_PORT ?? 5173);
 
 export default defineConfig({
   root: 'frontend',
   plugins: [react(), tailwindcss()],
   server: {
-    host: appConfig.frontend_host,
-    port: appConfig.vite_port,
+    host: frontendHost,
+    port: frontendPort,
     strictPort: true,
     proxy: {
       '/api': {
