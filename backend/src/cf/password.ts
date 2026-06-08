@@ -1,27 +1,37 @@
-import { argon2id } from 'hash-wasm';
-
 export type PasswordHashProfile = 'standard' | 'low';
-type PasswordHashProfileId = 'standard-v2' | 'low-v2';
+type PasswordHashProfileId = 'standard-pbkdf2-v1' | 'low-pbkdf2-v1';
 
-type Argon2Params = { memory: number; passes: number; parallelism: number; tagLength: number };
-type ProfileDef = { id: PasswordHashProfileId; params: Argon2Params };
+type ProfileDef = { id: PasswordHashProfileId; iterations: number };
 
+// PBKDF2 via WebCrypto: native to the Workers runtime (no WASM), so it works on
+// all Cloudflare tiers without hitting the "Wasm code generation disallowed"
+// restriction that breaks hash-wasm/argon2. 'standard' follows OWASP's
+// PBKDF2-SHA256 guidance; 'low' is for generated/temporary passwords that must
+// be reset on first login (see isLowCostPasswordHash → password_setup_required).
 const profiles: Record<PasswordHashProfile, ProfileDef> = {
-  standard: { id: 'standard-v2', params: { memory: 16_384, passes: 3, parallelism: 4, tagLength: 64 } },
-  low:      { id: 'low-v2',      params: { memory: 4_096,  passes: 1, parallelism: 1, tagLength: 64 } },
+  standard: { id: 'standard-pbkdf2-v1', iterations: 600_000 },
+  low:      { id: 'low-pbkdf2-v1',      iterations: 100_000 },
 };
-const profilesById = Object.fromEntries(
-  Object.values(profiles).map((p) => [p.id, p])
-) as Record<PasswordHashProfileId, ProfileDef>;
 
-const nonceSize = 16;
-const hashPrefix = 'argon2id';
-const secretKey = new TextEncoder().encode(hashPrefix);
+const HASH_PREFIX = 'pbkdf2';
+const HASH_ALGORITHM = 'SHA-256';
+const SALT_BYTES = 16;
+const DERIVED_BITS = 256;
 
-function randomBytes(n: number) {
-  const b = new Uint8Array(n);
-  crypto.getRandomValues(b);
-  return b;
+async function deriveHash(password: string, salt: Uint8Array, iterations: number) {
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations, hash: HASH_ALGORITHM },
+    keyMaterial,
+    DERIVED_BITS
+  );
+  return new Uint8Array(bits);
 }
 
 function toHex(b: Uint8Array) {
@@ -38,17 +48,18 @@ function isHex(v: string) {
   return v.length > 0 && v.length % 2 === 0 && /^[0-9a-f]+$/i.test(v);
 }
 
-function formatHash(nonce: Uint8Array, tag: Uint8Array, id: PasswordHashProfileId) {
-  return `${hashPrefix}$${id}$${toHex(nonce)}$${toHex(tag)}`;
+function formatHash(salt: Uint8Array, hash: Uint8Array, profile: ProfileDef) {
+  return `${HASH_PREFIX}$${profile.id}$${profile.iterations}$${toHex(salt)}$${toHex(hash)}`;
 }
 
 function parseHash(value: string) {
   const parts = value.split('$');
-  const [prefix, profileId, nonceHex, tagHex] = parts;
-  if (parts.length !== 4 || prefix !== hashPrefix || !profileId || !nonceHex || !tagHex) return null;
-  const profile = profilesById[profileId as PasswordHashProfileId];
-  if (!profile || !isHex(nonceHex) || !isHex(tagHex)) return null;
-  return { profile, nonce: fromHex(nonceHex), tag: fromHex(tagHex) };
+  const [prefix, profileId, iterationsRaw, saltHex, hashHex] = parts;
+  if (parts.length !== 5 || prefix !== HASH_PREFIX || !profileId || !iterationsRaw || !saltHex || !hashHex) return null;
+  const iterations = Number(iterationsRaw);
+  if (!Number.isInteger(iterations) || iterations <= 0) return null;
+  if (!isHex(saltHex) || !isHex(hashHex)) return null;
+  return { profileId: profileId as PasswordHashProfileId, iterations, salt: fromHex(saltHex), hash: fromHex(hashHex) };
 }
 
 function timingSafeEqual(a: Uint8Array, b: Uint8Array) {
@@ -58,24 +69,11 @@ function timingSafeEqual(a: Uint8Array, b: Uint8Array) {
   return r === 0;
 }
 
-async function computeHash(password: string, nonce: Uint8Array, params: Argon2Params) {
-  return argon2id({
-    password,
-    salt: nonce,
-    secret: secretKey,
-    iterations: params.passes,
-    parallelism: params.parallelism,
-    memorySize: params.memory,
-    hashLength: params.tagLength,
-    outputType: 'binary',
-  }) as Promise<Uint8Array>;
-}
-
 export async function hashPassword(password: string, profile: PasswordHashProfile = 'standard') {
-  const { id, params } = profiles[profile];
-  const nonce = randomBytes(nonceSize);
-  const tag = await computeHash(password, nonce, params);
-  return formatHash(nonce, tag, id);
+  const def = profiles[profile];
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  const hash = await deriveHash(password, salt, def.iterations);
+  return formatHash(salt, hash, def);
 }
 
 export async function hashPasswordSync(password: string, profile: PasswordHashProfile = 'standard') {
@@ -89,11 +87,11 @@ export async function hashPasswords(passwords: string[], profile: PasswordHashPr
 export async function verifyPassword(password: string, hashedPassword: string) {
   const parsed = parseHash(hashedPassword);
   if (!parsed) return false;
-  const tag = await computeHash(password, parsed.nonce, parsed.profile.params);
-  return timingSafeEqual(tag, parsed.tag);
+  const computed = await deriveHash(password, parsed.salt, parsed.iterations);
+  return timingSafeEqual(computed, parsed.hash);
 }
 
 export function isLowCostPasswordHash(hashedPassword: string) {
   const parsed = parseHash(hashedPassword);
-  return parsed?.profile.id === profiles.low.id;
+  return parsed?.profileId === profiles.low.id;
 }

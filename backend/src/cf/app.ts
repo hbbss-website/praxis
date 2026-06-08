@@ -16,6 +16,12 @@ import { cleanupExpiredTempUploads } from './repository/uploads';
 // basePath('/api') mirrors the Node app's `.route('/api', api)`. The Pages
 // function forwards the full `/api/...` request path, and the frontend calls
 // `/api/...`, so routes must live under /api (defined here as /config, /auth, …).
+// Workers have no startup hook, so the default admin is seeded lazily on the
+// first request handled by each isolate. db.init() is idempotent (no-op once a
+// user exists). If it throws (e.g. schema not migrated yet) we leave the flag
+// unset so a later request retries once the D1 migrations have been applied.
+let adminSeeded = false;
+
 export const cfApi = new Hono<CFAppBindings>()
   .basePath('/api')
   .use('*', async (c, next) => {
@@ -23,6 +29,14 @@ export const cfApi = new Hono<CFAppBindings>()
     c.set('db', db);
     c.set('user', null);
     c.set('authError', null);
+    if (!adminSeeded) {
+      try {
+        await db.init();
+        adminSeeded = true;
+      } catch (error) {
+        console.error('默认管理员初始化失败（数据库可能尚未迁移）：', error);
+      }
+    }
     await next();
   })
   .use('*', cors({

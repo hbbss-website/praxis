@@ -3,6 +3,7 @@ frontend/dist/
 .wrangler/
 
 config.toml
+.dev.vars
 backend/data/
 
 .DS_Store
