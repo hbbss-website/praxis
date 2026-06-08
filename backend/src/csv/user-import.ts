@@ -1,5 +1,3 @@
-import { parseString, writeToString } from 'fast-csv';
-
 import type { CreateUserResult, UserRole } from '../models';
 
 export type CsvEncoding = 'utf-8' | 'utf-16' | 'gbk';
@@ -70,20 +68,24 @@ export async function parseUserImportCsvText(
 }
 
 export async function createUserCredentialsCsv(users: CreateUserResult[]) {
-  return await writeToString(
-    users.map((user) => ({
-      name: user.name,
-      english_name: user.english_name ?? '',
-      uid: user.uid,
-      role: user.role,
-      password: user.password
-    })),
-    {
-      headers: ['name', 'english_name', 'uid', 'role', 'password'],
-      quoteColumns: true,
-      includeEndRowDelimiter: true
-    }
-  );
+  const headers = ['name', 'english_name', 'uid', 'role', 'password'];
+  const lines = [headers.map(csvQuote).join(',')];
+
+  for (const user of users) {
+    lines.push([
+      user.name,
+      user.english_name ?? '',
+      user.uid,
+      user.role,
+      user.password
+    ].map(csvQuote).join(','));
+  }
+
+  return lines.join('\n') + '\n';
+}
+
+function csvQuote(value: unknown): string {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
 function decodeCsvBuffer(buffer: Uint8Array): { encoding: CsvEncoding; text: string } {
@@ -168,24 +170,25 @@ function looksLikeUtf16(buffer: Uint8Array, endianness: 'le' | 'be') {
   return expectedZeroCount / pairs > 0.3 && unexpectedZeroCount / pairs < 0.1;
 }
 
-async function parseCsvRows(text: string, requirement: CsvFormatRequirement) {
+function parseCsvRows(text: string, requirement: CsvFormatRequirement) {
   const rows: Array<{ lineNumber: number; columns: string[] }> = [];
 
-  await new Promise<void>((resolve, reject) => {
-    parseString<string[], string[]>(text, { headers: false, ignoreEmpty: true, trim: true })
-      .on('error', (error) => reject(formatCsvParseError(error)))
-      .on('data', (columns) => {
-        const lineNumber = rows.length + 1;
+  for (const columns of parseCsvText(text)) {
+    const trimmed = columns.map((column) => column.trim());
 
-        if (columns.length !== requirement.columnCount) {
-          reject(new Error(`第 ${lineNumber} 行格式无效，必须包含 ${requirement.columnCount} 列。`));
-          return;
-        }
+    // ignoreEmpty: skip rows that are entirely blank (including trailing newline).
+    if (trimmed.every((column) => column === '')) {
+      continue;
+    }
 
-        rows.push({ lineNumber, columns });
-      })
-      .on('end', () => resolve());
-  });
+    const lineNumber = rows.length + 1;
+
+    if (trimmed.length !== requirement.columnCount) {
+      throw new Error(`第 ${lineNumber} 行格式无效，必须包含 ${requirement.columnCount} 列。`);
+    }
+
+    rows.push({ lineNumber, columns: trimmed });
+  }
 
   if (rows.length === 0) {
     throw new Error('CSV 文件没有有效内容。');
@@ -194,10 +197,62 @@ async function parseCsvRows(text: string, requirement: CsvFormatRequirement) {
   return rows;
 }
 
-function formatCsvParseError(error: Error) {
-  if (error.message.includes('missing closing')) {
-    return new Error('CSV 文件格式无效，存在未闭合的引号。');
+// Minimal RFC 4180 parser. Workers-compatible (no Node stream dependency).
+// Handles quoted fields, "" escapes, and commas/newlines inside quotes.
+function parseCsvText(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  let hasContent = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = true;
+      hasContent = true;
+    } else if (char === ',') {
+      row.push(field);
+      field = '';
+      hasContent = true;
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && text[i + 1] === '\n') {
+        i += 1;
+      }
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+      hasContent = false;
+    } else {
+      field += char;
+      hasContent = true;
+    }
   }
 
-  return new Error(`CSV 文件格式无效：${error.message}`);
+  if (inQuotes) {
+    throw new Error('CSV 文件格式无效，存在未闭合的引号。');
+  }
+
+  if (hasContent || field !== '') {
+    row.push(field);
+    rows.push(row);
+  }
+
+  return rows;
 }
