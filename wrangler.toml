@@ -40,8 +40,9 @@ bucket_name = "praxis-uploads"
 binding = "KV"
 id = "REPLACE_WITH_KV_ID"
 
-[triggers]
-crons = ["*/5 * * * *"]
+# NOTE: Cloudflare Pages does not support cron triggers ([triggers]/crons).
+# PQC key rotation is request-driven (lazy maybeRotate()), so no cron is needed.
+# Scheduled temp-upload cleanup must run in a separate Worker if required.
 
 # Secrets — run once before deploying:
 #   wrangler secret put JWT_SECRET
