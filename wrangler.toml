@@ -30,15 +30,15 @@ MAX_RECORD_DURATION = "24"
 [[d1_databases]]
 binding = "DB"
 database_name = "praxis"
-database_id = "REPLACE_WITH_D1_ID"
+database_id = "donepraxis"
 
 [[r2_buckets]]
 binding = "UPLOADS"
-bucket_name = "praxis-uploads"
+bucket_name = "uploadspraxis"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "REPLACE_WITH_KV_ID"
+id = "Login_praxis"
 
 # NOTE: Cloudflare Pages does not support cron triggers ([triggers]/crons).
 # PQC key rotation is request-driven (lazy maybeRotate()), so no cron is needed.
