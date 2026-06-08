@@ -38,7 +38,7 @@ bucket_name = "uploadspraxis"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "Login_praxis"
+id = "b98e968b831e4ab285b8b551a851b48f"
 
 # NOTE: Cloudflare Pages does not support cron triggers ([triggers]/crons).
 # PQC key rotation is request-driven (lazy maybeRotate()), so no cron is needed.
