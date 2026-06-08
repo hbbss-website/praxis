@@ -89,7 +89,12 @@ function createDefaultConfig(): AppConfig {
     vite_port: 5173,
     backend_host: "127.0.0.1",
     frontend_host: "127.0.0.1",
-    jwt_secret: randomSecret(),
+    // NOTE: must stay a static default — must NOT call randomSecret() here.
+    // createDefaultConfig() runs at module top level, and generating random
+    // values in Worker global scope is disallowed. The Node server fills in a
+    // real secret lazily via ensurePersistedJwtSecret(); CF reads JWT_SECRET
+    // from its env binding (see cf/config.ts), not from this object.
+    jwt_secret: "",
     jwt_issuer: "praxis",
     jwt_expires_in: "8h",
     login_max_attempts: 5,

@@ -16,7 +16,14 @@ import {
 } from '../../http';
 import { getCFConfig } from '../config';
 
-const dummyPasswordHash = await hashPassword('not-the-real-password');
+// Lazily computed: hashPassword() generates random bytes, which is disallowed
+// in Worker global scope. Computed on first use inside a handler and cached.
+// Used to keep timing constant when no matching account exists.
+let dummyPasswordHashCache: string | null = null;
+async function getDummyPasswordHash(): Promise<string> {
+  dummyPasswordHashCache ??= await hashPassword('not-the-real-password');
+  return dummyPasswordHashCache;
+}
 const loginChallenges = new Map<string, { userIds: Set<number>; expiresAt: number }>();
 const loginChallengeTtlMs = 5 * 60 * 1000;
 
@@ -87,7 +94,7 @@ async function resolveLogin(c: Context<CFAppBindings>, kind: string, identifier:
   }
 
   if (candidates.length === 0) {
-    await verifyPassword(password, dummyPasswordHash);
+    await verifyPassword(password, await getDummyPasswordHash());
     await recordLoginFailure(db, cfg.login_max_attempts, cfg.login_lockout_ms, attemptKey);
     c.header('cache-control', 'no-store');
     return apiError(c, 401, '账号或密码错误。');
@@ -183,7 +190,7 @@ export const cfAuthRoutes = new Hono<CFAppBindings>()
         c.header('cache-control', 'no-store');
         return apiError(c, 429, `登录失败次数过多，请在 ${Math.ceil(remaining / 1000)} 秒后重试。`);
       }
-      await verifyPassword(password, dummyPasswordHash);
+      await verifyPassword(password, await getDummyPasswordHash());
       await recordLoginFailure(db, cfg.login_max_attempts, cfg.login_lockout_ms, netKey);
       c.header('cache-control', 'no-store');
       return apiError(c, 401, 'UID 或密码错误。');

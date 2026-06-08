@@ -36,14 +36,19 @@ function createManagedKey(): ManagedKey {
   };
 }
 
-let current: ManagedKey = createManagedKey();
+// Lazily initialized. createManagedKey() generates random key material, which
+// is disallowed in Worker global scope, so it must only run inside a handler.
+let current: ManagedKey | null = null;
 let previous: ManagedKey | null = null;
 
-function maybeRotate() {
-  if (Date.now() > current.expiresAt) {
+function ensureCurrentKey(): ManagedKey {
+  if (current === null) {
+    current = createManagedKey();
+  } else if (Date.now() > current.expiresAt) {
     previous = current;
     current = createManagedKey();
   }
+  return current;
 }
 
 function toBase64Url(b: Uint8Array) {
@@ -51,22 +56,22 @@ function toBase64Url(b: Uint8Array) {
 }
 
 export function getPublicKey(): PublicKeyResponse {
-  maybeRotate();
+  const cur = ensureCurrentKey();
   return {
-    key_id: current.keyId,
-    public_key: toBase64Url(current.publicKey),
+    key_id: cur.keyId,
+    public_key: toBase64Url(cur.publicKey),
     algorithm: KEY_ALGORITHM,
-    expires_at: new Date(current.expiresAt).toISOString(),
+    expires_at: new Date(cur.expiresAt).toISOString(),
   };
 }
 
 export function decryptEnvelope(envelope: string): string {
-  maybeRotate();
+  const cur = ensureCurrentKey();
   const segments = envelope.split('.');
   if (segments.length !== 4) throw new EnvelopeDecryptError('密文信封格式无效。');
 
   const [keyId, kemB64, ivB64, aesB64] = segments;
-  const key = current.keyId === keyId ? current : (previous?.keyId === keyId ? previous : null);
+  const key = cur.keyId === keyId ? cur : (previous?.keyId === keyId ? previous : null);
   if (!key) throw new EnvelopeDecryptError('密钥已轮换或不存在，请重试。');
 
   try {

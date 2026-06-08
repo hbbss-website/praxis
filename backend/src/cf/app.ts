@@ -13,7 +13,11 @@ import { cfUploadRoutes } from './routes/upload';
 import { createD1DB } from './db';
 import { cleanupExpiredTempUploads } from './repository/uploads';
 
+// basePath('/api') mirrors the Node app's `.route('/api', api)`. The Pages
+// function forwards the full `/api/...` request path, and the frontend calls
+// `/api/...`, so routes must live under /api (defined here as /config, /auth, …).
 export const cfApi = new Hono<CFAppBindings>()
+  .basePath('/api')
   .use('*', async (c, next) => {
     const db = new CFDatabase(c.env);
     c.set('db', db);
