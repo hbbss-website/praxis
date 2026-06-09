@@ -109,9 +109,10 @@ export const authMiddleware = createMiddleware<CFAppBindings>(async (c, next) =>
         await next();
         return;
       }
-      c.set('authError', '认证令牌权限范围无效。');
+      c.set('authError', '认证令牌已失效，请重新登录。');
       c.set('user', null);
-      return c.json({ error: '认证令牌权限范围无效。' }, 403);
+      await next();
+      return;
     }
 
     if (passwordSetupRequired && !isPasswordSetupAllowedRequest(c.req.path, c.req.method)) {
