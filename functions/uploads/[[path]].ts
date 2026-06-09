@@ -1,9 +1,9 @@
 import type { Env } from '../../backend/src/cf/env';
 import { getCookie } from 'hono/cookie';
 import { jwtVerify } from 'jose';
-import { getCFConfig, parseDurationSeconds } from '../../backend/src/cf/config';
+import { getCFConfig } from '../../backend/src/cf/config';
 import { createD1DB } from '../../backend/src/cf/db';
-import { canAccessUpload } from '../../backend/src/cf/repository/uploads';
+import { canAccessUpload } from '../../backend/src/cf/repository/records';
 import type { AuthTokenPayload } from '../../backend/src/models';
 
 const mimeTypes: Record<string, string> = {
@@ -21,13 +21,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   const cfg = getCFConfig(env);
   const jwtKey = new TextEncoder().encode(cfg.jwt_secret);
-  const tokenAudiences = ['admin', 'teacher', 'student', 'unauthorized'];
 
   const authHeader = request.headers.get('authorization');
-  const cookieHeader = request.headers.get('cookie');
+  const cookieToken = getCookie({ req: { header: () => request.headers.get('cookie') } }, 'auth_token');
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  const cookieToken = cookieHeader ? parseCookieToken(cookieHeader) : null;
-  const token = bearerToken ?? cookieToken;
+  const token = bearerToken ?? cookieToken ?? null;
 
   if (!token) {
     return new Response('Unauthorized', { status: 401 });
@@ -38,7 +36,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   try {
     const verified = await jwtVerify<AuthTokenPayload>(token, jwtKey, {
       issuer: cfg.jwt_issuer,
-      audience: tokenAudiences
+      audience: ['admin', 'teacher', 'student']
     });
     userId = verified.payload.id;
     userRole = verified.payload.role;
@@ -47,7 +45,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   const db = createD1DB(env.DB);
-  const hasAccess = await canAccessUpload(db, env.UPLOADS, imagePath, userId, userRole);
+  const hasAccess = await canAccessUpload(db, imagePath, userId, userRole);
 
   if (!hasAccess) {
     return new Response('Not Found', { status: 404 });
@@ -70,11 +68,3 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   });
 };
-
-function parseCookieToken(cookieHeader: string): string | null {
-  for (const part of cookieHeader.split(';')) {
-    const [name, ...rest] = part.trim().split('=');
-    if (name?.trim() === 'auth_token') return rest.join('=').trim();
-  }
-  return null;
-}
