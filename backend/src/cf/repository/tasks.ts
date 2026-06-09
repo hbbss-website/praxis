@@ -68,18 +68,16 @@ export async function createTask(db: D1DB, input: CreatePracticeTaskInput): Prom
   const classIds = uniquePositiveIds(input.class_ids);
   if (!classIds.length) throw new Error('请选择至少一个班级。');
   const createdAt = nowIso();
-  const taskId = await db.transaction(async (tx) => {
-    const [inserted] = await tx.insert(practiceTasks).values({
-      title: input.title, description: input.description,
-      startAt: input.start_at, endAt: input.end_at,
-      minWords: input.min_words, minImages: input.min_images,
-      maxRecordsPerStudent: input.max_records_per_student,
-      scoreEnabled: input.score_enabled,
-      createdById: input.created_by_id, createdAt
-    }).returning({ id: practiceTasks.id });
-    await tx.insert(practiceTaskClasses).values(classIds.map((cid) => ({ taskId: inserted!.id, classId: cid, createdAt }))).run();
-    return inserted!.id;
-  });
+  const [inserted] = await db.insert(practiceTasks).values({
+    title: input.title, description: input.description,
+    startAt: input.start_at, endAt: input.end_at,
+    minWords: input.min_words, minImages: input.min_images,
+    maxRecordsPerStudent: input.max_records_per_student,
+    scoreEnabled: input.score_enabled,
+    createdById: input.created_by_id, createdAt
+  }).returning({ id: practiceTasks.id });
+  const taskId = inserted!.id;
+  await db.insert(practiceTaskClasses).values(classIds.map((cid) => ({ taskId, classId: cid, createdAt }))).run();
   return getTaskDetail(db, taskId) as Promise<PracticeTaskDetail>;
 }
 
@@ -94,28 +92,24 @@ export async function updateTask(db: D1DB, taskId: number, input: UpdatePractice
   if (input.min_words !== undefined) values.minWords = input.min_words;
   if (input.min_images !== undefined) values.minImages = input.min_images;
   if (input.max_records_per_student !== undefined) values.maxRecordsPerStudent = input.max_records_per_student;
-  await db.transaction(async (tx) => {
-    if (Object.keys(values).length > 0) await tx.update(practiceTasks).set(values).where(eq(practiceTasks.id, taskId)).run();
-    if (input.class_ids !== undefined) {
-      const currentClassIds = new Set(current.classes.map((c) => c.id));
-      const next = uniquePositiveIds(input.class_ids).filter((id) => !currentClassIds.has(id));
-      if (next.length > 0) {
-        const createdAt = nowIso();
-        await tx.insert(practiceTaskClasses).values(next.map((cid) => ({ taskId, classId: cid, createdAt }))).onConflictDoNothing().run();
-      }
+  if (Object.keys(values).length > 0) await db.update(practiceTasks).set(values).where(eq(practiceTasks.id, taskId)).run();
+  if (input.class_ids !== undefined) {
+    const currentClassIds = new Set(current.classes.map((c) => c.id));
+    const next = uniquePositiveIds(input.class_ids).filter((id) => !currentClassIds.has(id));
+    if (next.length > 0) {
+      const createdAt = nowIso();
+      await db.insert(practiceTaskClasses).values(next.map((cid) => ({ taskId, classId: cid, createdAt }))).onConflictDoNothing().run();
     }
-  });
+  }
   return getTaskDetail(db, taskId);
 }
 
 export async function deleteTask(db: D1DB, bucket: R2Bucket, taskId: number) {
   const rows = await db.select({ imagePaths: practiceRecords.imagePaths }).from(practiceRecords)
     .where(eq(practiceRecords.taskId, taskId)).all();
-  await db.transaction(async (tx) => {
-    await tx.delete(practiceRecords).where(eq(practiceRecords.taskId, taskId)).run();
-    await tx.delete(practiceTaskClasses).where(eq(practiceTaskClasses.taskId, taskId)).run();
-    await tx.delete(practiceTasks).where(eq(practiceTasks.id, taskId)).run();
-  });
+  await db.delete(practiceRecords).where(eq(practiceRecords.taskId, taskId)).run();
+  await db.delete(practiceTaskClasses).where(eq(practiceTaskClasses.taskId, taskId)).run();
+  await db.delete(practiceTasks).where(eq(practiceTasks.id, taskId)).run();
   for (const row of rows) {
     try { const paths: string[] = JSON.parse(row.imagePaths || '[]'); await Promise.all(paths.map((p) => deleteR2Upload(bucket, p))); } catch {}
   }
@@ -133,10 +127,8 @@ export async function removeTaskClass(db: D1DB, bucket: R2Bucket, taskId: number
   const rows = await db.select({ imagePaths: practiceRecords.imagePaths }).from(practiceRecords)
     .innerJoin(classStudents, eq(practiceRecords.studentId, classStudents.studentId))
     .where(and(eq(practiceRecords.taskId, taskId), eq(classStudents.classId, classId))).all();
-  await db.transaction(async (tx) => {
-    await tx.delete(practiceRecords).where(sql`${practiceRecords.id} in (select practice_records.id from practice_records inner join class_students on practice_records.student_id = class_students.student_id where practice_records.task_id = ${taskId} and class_students.class_id = ${classId})`).run();
-    await tx.delete(practiceTaskClasses).where(and(eq(practiceTaskClasses.taskId, taskId), eq(practiceTaskClasses.classId, classId))).run();
-  });
+  await db.delete(practiceRecords).where(sql`${practiceRecords.id} in (select practice_records.id from practice_records inner join class_students on practice_records.student_id = class_students.student_id where practice_records.task_id = ${taskId} and class_students.class_id = ${classId})`).run();
+  await db.delete(practiceTaskClasses).where(and(eq(practiceTaskClasses.taskId, taskId), eq(practiceTaskClasses.classId, classId))).run();
   for (const row of rows) {
     try { const paths: string[] = JSON.parse(row.imagePaths || '[]'); await Promise.all(paths.map((p) => deleteR2Upload(bucket, p))); } catch {}
   }

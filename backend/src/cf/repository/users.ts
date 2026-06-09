@@ -115,18 +115,16 @@ export async function createUsers(db: D1DB, cfg: CFConfig, entries: Array<{ name
     password: hashes[i]!, role: e.role, name: e.name, englishName: e.englishName ?? null,
     nameInitials: getPinyinInitials(e.name), createdAt, deletedAt: null as null
   }));
-  return db.transaction(async (tx) => {
-    const inserted = await tx.insert(users).values(rows).returning({ id: users.id });
-    const studentAssignments = entries.flatMap((e, i) =>
-      e.role === 'student' && e.classId ? [{ classId: e.classId, studentId: inserted[i]!.id, createdAt: nowIso() }] : []
-    );
-    const teacherAssignments = entries.flatMap((e, i) =>
-      e.role === 'teacher' && e.classId ? [{ classId: e.classId, teacherId: inserted[i]!.id, createdAt: nowIso() }] : []
-    );
-    if (studentAssignments.length) await tx.insert(classStudents).values(studentAssignments).run();
-    if (teacherAssignments.length) await tx.insert(classTeachers).values(teacherAssignments).run();
-    return inserted.map((r, i) => ({ id: r.id, uid: r.id, role: rows[i]!.role, name: rows[i]!.name, english_name: rows[i]!.englishName, password: passwords[i]! }));
-  });
+  const inserted = await db.insert(users).values(rows).returning({ id: users.id });
+  const studentAssignments = entries.flatMap((e, i) =>
+    e.role === 'student' && e.classId ? [{ classId: e.classId, studentId: inserted[i]!.id, createdAt: nowIso() }] : []
+  );
+  const teacherAssignments = entries.flatMap((e, i) =>
+    e.role === 'teacher' && e.classId ? [{ classId: e.classId, teacherId: inserted[i]!.id, createdAt: nowIso() }] : []
+  );
+  if (studentAssignments.length) await db.insert(classStudents).values(studentAssignments).run();
+  if (teacherAssignments.length) await db.insert(classTeachers).values(teacherAssignments).run();
+  return inserted.map((r, i) => ({ id: r.id, uid: r.id, role: rows[i]!.role, name: rows[i]!.name, english_name: rows[i]!.englishName, password: passwords[i]! }));
 }
 
 export async function updateUserName(db: D1DB, id: number, name: string, englishName?: string | null) {
@@ -148,11 +146,9 @@ export async function resetUserPasswords(db: D1DB, cfg: CFConfig, ids: number[])
   if (!activeUsers.length) return [];
   const passwords = activeUsers.map(() => generatePlainPassword(cfg.generated_password_length));
   const hashes = await hashPasswords(passwords, 'low');
-  await db.transaction(async (tx) => {
-    for (let i = 0; i < activeUsers.length; i++) {
-      await tx.update(users).set({ password: hashes[i]! }).where(eq(users.id, activeUsers[i]!.id)).run();
-    }
-  });
+  for (let i = 0; i < activeUsers.length; i++) {
+    await db.update(users).set({ password: hashes[i]! }).where(eq(users.id, activeUsers[i]!.id)).run();
+  }
   return activeUsers.map((u, i) => ({ id: u.id, uid: u.id, role: u.role as UserRole, name: u.name, english_name: u.englishName, password: passwords[i]! }));
 }
 

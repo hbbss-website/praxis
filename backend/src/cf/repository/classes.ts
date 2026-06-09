@@ -82,10 +82,8 @@ export async function removeTeachersFromClass(db: D1DB, classId: number, teacher
 export async function assignStudentsToClass(db: D1DB, classId: number, studentIds: number[]) {
   if (!studentIds.length) return;
   const createdAt = nowIso();
-  await db.transaction(async (tx) => {
-    await tx.delete(classStudents).where(inArray(classStudents.studentId, studentIds)).run();
-    await tx.insert(classStudents).values(studentIds.map((sid) => ({ classId, studentId: sid, createdAt }))).run();
-  });
+  await db.delete(classStudents).where(inArray(classStudents.studentId, studentIds)).run();
+  await db.insert(classStudents).values(studentIds.map((sid) => ({ classId, studentId: sid, createdAt }))).run();
 }
 
 export async function removeStudentsFromClass(db: D1DB, classId: number, studentIds: number[]) {
