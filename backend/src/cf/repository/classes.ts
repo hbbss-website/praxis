@@ -40,8 +40,8 @@ export async function findClassByName(db: D1DB, name: string) {
 }
 
 export async function updateClassName(db: D1DB, id: number, name: string) {
-  const result = await db.update(classes).set({ name }).where(eq(classes.id, id)).run();
-  return (result as any).rowsAffected > 0 || (result as any).changes > 0;
+  await db.update(classes).set({ name }).where(eq(classes.id, id)).run();
+  return true;
 }
 
 export async function getClasses(db: D1DB) {

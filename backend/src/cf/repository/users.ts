@@ -130,13 +130,13 @@ export async function createUsers(db: D1DB, cfg: CFConfig, entries: Array<{ name
 export async function updateUserName(db: D1DB, id: number, name: string, englishName?: string | null) {
   const values: Partial<typeof users.$inferInsert> = { name, nameInitials: getPinyinInitials(name) };
   if (englishName !== undefined) values.englishName = englishName;
-  const result = await db.update(users).set(values).where(activeById(id)).run();
-  return (result as any).rowsAffected > 0 || (result as any).changes > 0;
+  await db.update(users).set(values).where(activeById(id)).run();
+  return true;
 }
 
 export async function updateUserPassword(db: D1DB, id: number, hashedPassword: string) {
-  const result = await db.update(users).set({ password: hashedPassword }).where(activeById(id)).run();
-  return (result as any).rowsAffected > 0 || (result as any).changes > 0;
+  await db.update(users).set({ password: hashedPassword }).where(activeById(id)).run();
+  return true;
 }
 
 export async function resetUserPasswords(db: D1DB, cfg: CFConfig, ids: number[]) {
