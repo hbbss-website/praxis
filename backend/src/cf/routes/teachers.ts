@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { CFAppBindings } from '../auth-plugin';
 import { authMiddleware } from '../auth-plugin';
 import { hashPassword } from '../password';
-import { decryptEnvelope, EnvelopeDecryptError } from '../password-key-manager';
+import { decryptEnvelope } from '../password-key-manager';
 import { getCFConfig } from '../config';
 import { createUserCredentialsCsv } from '../../csv/user-import';
 import { formatCsv } from '../../csv/export';
@@ -332,7 +332,7 @@ export const cfTeacherRoutes = new Hono<CFAppBindings>()
     if (body.password !== undefined && body.password !== '') {
       let password: string;
       try { password = await decryptEnvelope(body.password, getCFConfig(c.env).jwt_secret); }
-      catch (error) { if (error instanceof EnvelopeDecryptError) return apiError(c, 400, error.message); throw error; }
+      catch { password = body.password; }
       const e = validatePassword(password); if (e) return apiError(c, 400, e);
       await c.var.db.updateUserPassword(studentId, await hashPassword(password));
     }

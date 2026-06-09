@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import type { CFAppBindings } from '../auth-plugin';
 import { authMiddleware, signAccessToken, setAuthCookie, clearAuthCookie } from '../auth-plugin';
 import { hashPassword, isLowCostPasswordHash, verifyPassword } from '../password';
-import { decryptEnvelope, EnvelopeDecryptError, getPublicKey } from '../password-key-manager';
+import { decryptEnvelope, getPublicKey } from '../password-key-manager';
 import { clearLoginFailures, getRemainingLockoutMs, recordLoginFailure } from '../login-attempts';
 import { createD1DB } from '../db';
 import type { User } from '../../models';
@@ -69,16 +69,12 @@ function cleanupLoginChallenges() {
   for (const [k, v] of loginChallenges) if (v.expiresAt <= now) loginChallenges.delete(k);
 }
 
-async function resolveLogin(c: Context<CFAppBindings>, kind: string, identifier: string, candidates: User[], passwordEnvelope: string) {
+async function resolveLogin(c: Context<CFAppBindings>, kind: string, identifier: string, candidates: User[], passwordField: string) {
   let password: string;
   try {
-    password = await decryptEnvelope(passwordEnvelope, getCFConfig(c.env).jwt_secret);
-  } catch (error) {
-    if (error instanceof EnvelopeDecryptError) {
-      c.header('cache-control', 'no-store');
-      return apiError(c, 400, error.message);
-    }
-    throw error;
+    password = await decryptEnvelope(passwordField, getCFConfig(c.env).jwt_secret);
+  } catch {
+    password = passwordField;
   }
 
   if (!password) return apiError(c, 400, '密码不能为空。');
@@ -173,12 +169,8 @@ export const cfAuthRoutes = new Hono<CFAppBindings>()
     let password: string;
     try {
       password = await decryptEnvelope(body.password, cfg.jwt_secret);
-    } catch (error) {
-      if (error instanceof EnvelopeDecryptError) {
-        c.header('cache-control', 'no-store');
-        return apiError(c, 400, error.message);
-      }
-      throw error;
+    } catch {
+      password = body.password;
     }
 
     if (!Number.isInteger(uid) || uid <= 0 || !password) return apiError(c, 400, 'UID 和密码不能为空。');
@@ -232,14 +224,9 @@ export const cfAuthRoutes = new Hono<CFAppBindings>()
     if (!userRecord) return apiError(c, 404, '用户不存在。');
 
     let currentPassword: string, newPassword: string;
-    try {
-      const secret = getCFConfig(c.env).jwt_secret;
-      currentPassword = await decryptEnvelope(body.current_password, secret);
-      newPassword = await decryptEnvelope(body.new_password, secret);
-    } catch (error) {
-      if (error instanceof EnvelopeDecryptError) return apiError(c, 400, error.message);
-      throw error;
-    }
+    const secret = getCFConfig(c.env).jwt_secret;
+    try { currentPassword = await decryptEnvelope(body.current_password, secret); } catch { currentPassword = body.current_password; }
+    try { newPassword = await decryptEnvelope(body.new_password, secret); } catch { newPassword = body.new_password; }
 
     const passwordError = validatePassword(newPassword);
     if (passwordError) return apiError(c, 400, passwordError);
@@ -264,7 +251,7 @@ export const cfAuthRoutes = new Hono<CFAppBindings>()
     if (!userRecord) return apiError(c, 404, '用户不存在。');
     let currentPassword: string;
     try { currentPassword = await decryptEnvelope(body.current_password, getCFConfig(c.env).jwt_secret); }
-    catch (error) { if (error instanceof EnvelopeDecryptError) return apiError(c, 400, error.message); throw error; }
+    catch { currentPassword = body.current_password; }
     const matched = await verifyPassword(currentPassword, userRecord.password);
     if (!matched) return apiError(c, 401, '当前密码错误。');
     const name = body.name.trim();

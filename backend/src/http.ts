@@ -25,16 +25,13 @@ export const userRoleSchema = z.enum(userRoles);
 export const recordStatusSchema = z.enum(recordStatuses);
 export const recordSortSchema = z.enum(['created_at_desc', 'created_at_asc', 'score_desc', 'score_asc'] satisfies [RecordSort, RecordSort, RecordSort, RecordSort]);
 export const notificationTypeSchema = z.enum(notificationTypes);
-const passwordEnvelopePattern = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+){3}$/;
 const requiredPasswordSchema = z
   .string()
   .min(1, '密码不能为空。')
-  .max(4096, '密码格式无效。')
-  .regex(passwordEnvelopePattern, '密码格式无效。');
+  .max(4096, '密码格式无效。');
 const optionalPasswordSchema = z
   .string()
-  .max(4096, '密码格式无效。')
-  .refine((value) => value === '' || passwordEnvelopePattern.test(value), '密码格式无效。');
+  .max(4096, '密码格式无效。');
 
 export const idParamSchema = z.object({
   id: z.string().regex(positiveIdPattern)

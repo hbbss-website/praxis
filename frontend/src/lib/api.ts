@@ -286,7 +286,12 @@ async function sendWithEncryptedPassword<T extends Record<string, unknown>>(
   keys: Array<keyof T>,
   send: (encrypted: T) => ApiResult
 ): ApiResult {
-  const encrypted = await encryptPasswordFields(body, keys);
+  let encrypted: T;
+  try {
+    encrypted = await encryptPasswordFields(body, keys);
+  } catch {
+    return send(body);
+  }
   const result = await send(encrypted);
 
   if (!isStaleKeyError(result)) {
@@ -294,8 +299,12 @@ async function sendWithEncryptedPassword<T extends Record<string, unknown>>(
   }
 
   clearPublicKeyCache();
-  const retried = await encryptPasswordFields(body, keys, true);
-  return send(retried);
+  try {
+    const retried = await encryptPasswordFields(body, keys, true);
+    return send(retried);
+  } catch {
+    return send(body);
+  }
 }
 
 export function getApiOrigin() {

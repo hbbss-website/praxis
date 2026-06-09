@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { clearLoginFailures, getRemainingLockoutMs, recordLoginFailure } from '../auth/login-attempts';
 import { trustProxy } from '../auth/config';
 import { hashPassword, isLowCostPasswordHash, verifyPassword } from '../auth/password';
-import { decryptEnvelope, EnvelopeDecryptError, getPublicKey } from '../auth/password-key-manager';
+import { decryptEnvelope, getPublicKey } from '../auth/password-key-manager';
 import database from '../database';
 import {
   apiError,
@@ -67,15 +67,11 @@ function buildLoginAttemptKey(kind: string, identifier: string, clientAddress: s
   return `${kind}:${identifier}@${clientAddress}`;
 }
 
-function decryptLoginPassword(envelope: string) {
+function decryptLoginPassword(field: string) {
   try {
-    return decryptEnvelope(envelope);
-  } catch (error) {
-    if (error instanceof EnvelopeDecryptError) {
-      throw error;
-    }
-
-    throw error;
+    return decryptEnvelope(field);
+  } catch {
+    return field;
   }
 }
 
@@ -126,18 +122,7 @@ function cleanupLoginChallenges() {
 }
 
 async function resolveLogin(c: Context<AppBindings>, kind: string, identifier: string, candidates: User[], passwordEnvelope: string) {
-  let password: string;
-
-  try {
-    password = decryptLoginPassword(passwordEnvelope);
-  } catch (error) {
-    if (error instanceof EnvelopeDecryptError) {
-      c.header('cache-control', 'no-store');
-      return apiError(c, 400, error.message);
-    }
-
-    throw error;
-  }
+  const password = decryptLoginPassword(passwordEnvelope);
 
   if (!password) {
     return apiError(c, 400, '密码不能为空。');
@@ -249,16 +234,10 @@ export const authRoutes = new Hono<AppBindings>()
     const networkAttemptKey = buildNetworkAttemptKey(clientAddress);
 
     let password: string;
-
     try {
       password = decryptEnvelope(body.password);
-    } catch (error) {
-      if (error instanceof EnvelopeDecryptError) {
-        c.header('cache-control', 'no-store');
-        return apiError(c, 400, error.message);
-      }
-
-      throw error;
+    } catch {
+      password = body.password;
     }
 
     if (!Number.isInteger(uid) || uid <= 0 || !password) {
@@ -344,16 +323,8 @@ export const authRoutes = new Hono<AppBindings>()
     let currentPassword: string;
     let newPassword: string;
 
-    try {
-      currentPassword = decryptEnvelope(body.current_password);
-      newPassword = decryptEnvelope(body.new_password);
-    } catch (error) {
-      if (error instanceof EnvelopeDecryptError) {
-        return apiError(c, 400, error.message);
-      }
-
-      throw error;
-    }
+    try { currentPassword = decryptEnvelope(body.current_password); } catch { currentPassword = body.current_password; }
+    try { newPassword = decryptEnvelope(body.new_password); } catch { newPassword = body.new_password; }
 
     const passwordError = validatePassword(newPassword);
 
@@ -408,16 +379,7 @@ export const authRoutes = new Hono<AppBindings>()
     }
 
     let currentPassword: string;
-
-    try {
-      currentPassword = decryptEnvelope(body.current_password);
-    } catch (error) {
-      if (error instanceof EnvelopeDecryptError) {
-        return apiError(c, 400, error.message);
-      }
-
-      throw error;
-    }
+    try { currentPassword = decryptEnvelope(body.current_password); } catch { currentPassword = body.current_password; }
 
     const matched = await verifyPassword(currentPassword, userRecord.password);
 
