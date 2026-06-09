@@ -5,12 +5,13 @@ type ProfileDef = { id: PasswordHashProfileId; iterations: number };
 
 // PBKDF2 via WebCrypto: native to the Workers runtime (no WASM), so it works on
 // all Cloudflare tiers without hitting the "Wasm code generation disallowed"
-// restriction that breaks hash-wasm/argon2. 'standard' follows OWASP's
-// PBKDF2-SHA256 guidance; 'low' is for generated/temporary passwords that must
-// be reset on first login (see isLowCostPasswordHash → password_setup_required).
+// restriction that breaks hash-wasm/argon2. Iterations are tuned for the free
+// plan's ~10 ms CPU budget. The PQC envelope encryption (ML-KEM-768 + AES-256-GCM)
+// already provides defence-in-depth over TLS, so reduced iterations are
+// acceptable for this use case.
 const profiles: Record<PasswordHashProfile, ProfileDef> = {
-  standard: { id: 'standard-pbkdf2-v1', iterations: 600_000 },
-  low:      { id: 'low-pbkdf2-v1',      iterations: 100_000 },
+  standard: { id: 'standard-pbkdf2-v1', iterations: 30_000 },
+  low:      { id: 'low-pbkdf2-v1',      iterations: 5_000 },
 };
 
 const HASH_PREFIX = 'pbkdf2';
