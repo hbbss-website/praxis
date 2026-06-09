@@ -72,7 +72,7 @@ function cleanupLoginChallenges() {
 async function resolveLogin(c: Context<CFAppBindings>, kind: string, identifier: string, candidates: User[], passwordEnvelope: string) {
   let password: string;
   try {
-    password = decryptEnvelope(passwordEnvelope);
+    password = await decryptEnvelope(passwordEnvelope, getCFConfig(c.env).jwt_secret);
   } catch (error) {
     if (error instanceof EnvelopeDecryptError) {
       c.header('cache-control', 'no-store');
@@ -121,9 +121,9 @@ async function resolveLogin(c: Context<CFAppBindings>, kind: string, identifier:
 
 export const cfAuthRoutes = new Hono<CFAppBindings>()
   .use('*', authMiddleware)
-  .get('/public-key', (c) => {
+  .get('/public-key', async (c) => {
     c.header('cache-control', 'no-store');
-    return c.json(getPublicKey());
+    return c.json(await getPublicKey(getCFConfig(c.env).jwt_secret));
   })
   .get('/classes/search', zValidator('query', classSearchQuerySchema, validationHook), async (c) => {
     const query = c.req.valid('query');
@@ -172,7 +172,7 @@ export const cfAuthRoutes = new Hono<CFAppBindings>()
 
     let password: string;
     try {
-      password = decryptEnvelope(body.password);
+      password = await decryptEnvelope(body.password, cfg.jwt_secret);
     } catch (error) {
       if (error instanceof EnvelopeDecryptError) {
         c.header('cache-control', 'no-store');
@@ -233,8 +233,9 @@ export const cfAuthRoutes = new Hono<CFAppBindings>()
 
     let currentPassword: string, newPassword: string;
     try {
-      currentPassword = decryptEnvelope(body.current_password);
-      newPassword = decryptEnvelope(body.new_password);
+      const secret = getCFConfig(c.env).jwt_secret;
+      currentPassword = await decryptEnvelope(body.current_password, secret);
+      newPassword = await decryptEnvelope(body.new_password, secret);
     } catch (error) {
       if (error instanceof EnvelopeDecryptError) return apiError(c, 400, error.message);
       throw error;
@@ -262,7 +263,7 @@ export const cfAuthRoutes = new Hono<CFAppBindings>()
     const userRecord = await c.var.db.findUserById(currentUser.id);
     if (!userRecord) return apiError(c, 404, '用户不存在。');
     let currentPassword: string;
-    try { currentPassword = decryptEnvelope(body.current_password); }
+    try { currentPassword = await decryptEnvelope(body.current_password, getCFConfig(c.env).jwt_secret); }
     catch (error) { if (error instanceof EnvelopeDecryptError) return apiError(c, 400, error.message); throw error; }
     const matched = await verifyPassword(currentPassword, userRecord.password);
     if (!matched) return apiError(c, 401, '当前密码错误。');

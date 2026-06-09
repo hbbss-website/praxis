@@ -5,6 +5,7 @@ import type { CFAppBindings } from '../auth-plugin';
 import { authMiddleware } from '../auth-plugin';
 import { hashPassword } from '../password';
 import { decryptEnvelope, EnvelopeDecryptError } from '../password-key-manager';
+import { getCFConfig } from '../config';
 import { createUserCredentialsCsv, parseUserImportCsvBuffer, type CsvUserImportEntry } from '../../csv/user-import';
 import {
   apiError, batchDeleteUsersBodySchema, batchResetPasswordBodySchema, batchUpdateStudentClassBodySchema,
@@ -136,7 +137,7 @@ export const cfAdminRoutes = new Hono<CFAppBindings>()
     }
     if (body.password !== undefined && body.password !== '') {
       let password: string;
-      try { password = decryptEnvelope(body.password); }
+      try { password = await decryptEnvelope(body.password, getCFConfig(c.env).jwt_secret); }
       catch (error) { if (error instanceof EnvelopeDecryptError) return apiError(c, 400, error.message); throw error; }
       const e = validatePassword(password);
       if (e) return apiError(c, 400, e);
