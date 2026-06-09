@@ -181,8 +181,8 @@ export async function seedDefaultAdmin(db: D1DB, cfg: CFConfig) {
   const password = cfg.initial_admin_password;
   const hashed = await hashPassword(password, 'low');
   const [inserted] = await db.insert(users).values([{
-    password: hashed, role: 'admin', name: '超级奶龙', englishName: null,
-    nameInitials: getPinyinInitials('超级奶龙'),
+    password: hashed, role: 'admin', name: 'admin', englishName: null,
+    nameInitials: getPinyinInitials('admin'),
     createdAt: nowIso(), deletedAt: null
   }]).returning({ id: users.id });
   console.log('欢迎使用 Praxis，初始 uid：%s，初始密码：%s', inserted?.id, password);
