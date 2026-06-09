@@ -102,7 +102,7 @@ export function getAllStudents() {
 export async function createUser(name: string, role: UserRole, englishName: string | null = null): Promise<CreateUserResult> {
   const password = generatePlainPassword();
   const createdAt = nowIso();
-  const hashedPassword = await hashPassword(password, 'low');
+  const hashedPassword = await hashPassword(password, 'standard');
   const result = db.insert(users).values({
     password: hashedPassword, role, name, englishName,
     nameInitials: getPinyinInitials(name),
@@ -115,7 +115,7 @@ export async function createUser(name: string, role: UserRole, englishName: stri
 export async function createUsers(entries: Array<{ name: string; englishName?: string | null; role: UserRole; classId?: number | null }>) {
   if (entries.length === 0) return [];
   const passwords = entries.map(() => generatePlainPassword());
-  const hashes = await hashPasswords(passwords, 'low');
+  const hashes = await hashPasswords(passwords, 'standard');
   const createdAt = nowIso();
   const rows = entries.map((entry, index) => ({
     password: hashes[index]!, role: entry.role,
@@ -163,7 +163,7 @@ export async function resetUserPasswords(ids: number[]) {
     .from(users).where(and(inArray(users.id, ids), isNull(users.deletedAt))).all();
   if (activeUsers.length === 0) return [];
   const passwords = activeUsers.map(() => generatePlainPassword());
-  const hashes = await hashPasswords(passwords, 'low');
+  const hashes = await hashPasswords(passwords, 'standard');
   return db.transaction((tx) => activeUsers.map((user, index) => {
     tx.update(users).set({ password: hashes[index]! }).where(eq(users.id, user.id)).run();
     return { id: user.id, uid: user.id, role: user.role as UserRole, name: user.name, english_name: user.englishName, password: passwords[index]! };
@@ -203,7 +203,7 @@ export function seedDefaultAdmin() {
   if (admins.length > 0) return;
   const password = appConfig.initial_admin_password;
   const result = db.insert(users).values([{
-    password: hashPasswordSync(password, 'low'),
+    password: hashPasswordSync(password, 'standard'),
     role: 'admin',
     name: 'admin',
     englishName: null,

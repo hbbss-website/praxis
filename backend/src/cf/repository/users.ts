@@ -96,7 +96,7 @@ export async function getAllStudents(db: D1DB) {
 export async function createUser(db: D1DB, cfg: CFConfig, name: string, role: UserRole, englishName: string | null = null): Promise<CreateUserResult> {
   const password = generatePlainPassword(cfg.generated_password_length);
   const createdAt = nowIso();
-  const hashed = await hashPassword(password, 'low');
+  const hashed = await hashPassword(password, 'standard');
   const [row] = await db.insert(users).values({
     password: hashed, role, name, englishName,
     nameInitials: getPinyinInitials(name),
@@ -109,7 +109,7 @@ export async function createUser(db: D1DB, cfg: CFConfig, name: string, role: Us
 export async function createUsers(db: D1DB, cfg: CFConfig, entries: Array<{ name: string; englishName?: string | null; role: UserRole; classId?: number | null }>) {
   if (!entries.length) return [];
   const passwords = entries.map(() => generatePlainPassword(cfg.generated_password_length));
-  const hashes = await hashPasswords(passwords, 'low');
+  const hashes = await hashPasswords(passwords, 'standard');
   const createdAt = nowIso();
   const rows = entries.map((e, i) => ({
     password: hashes[i]!, role: e.role, name: e.name, englishName: e.englishName ?? null,
@@ -145,7 +145,7 @@ export async function resetUserPasswords(db: D1DB, cfg: CFConfig, ids: number[])
     .from(users).where(and(inArray(users.id, ids), isNull(users.deletedAt))).all();
   if (!activeUsers.length) return [];
   const passwords = activeUsers.map(() => generatePlainPassword(cfg.generated_password_length));
-  const hashes = await hashPasswords(passwords, 'low');
+  const hashes = await hashPasswords(passwords, 'standard');
   for (let i = 0; i < activeUsers.length; i++) {
     await db.update(users).set({ password: hashes[i]! }).where(eq(users.id, activeUsers[i]!.id)).run();
   }
@@ -184,7 +184,7 @@ export async function seedDefaultAdmin(db: D1DB, cfg: CFConfig) {
   }
   if (admins.length > 0) return;
   const password = cfg.initial_admin_password;
-  const hashed = await hashPassword(password, 'low');
+  const hashed = await hashPassword(password, 'standard');
   const [inserted] = await db.insert(users).values([{
     password: hashed, role: 'admin', name: 'admin', englishName: null,
     nameInitials: getPinyinInitials('admin'),
