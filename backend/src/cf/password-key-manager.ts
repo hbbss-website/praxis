@@ -69,18 +69,11 @@ async function deriveKey(secret: string, bucket: number): Promise<ManagedKey> {
 }
 
 function toBase64Url(b: Uint8Array) {
-  let binary = '';
-  for (const byte of b) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function bytesFromBase64Url(value: string) {
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+  return Buffer.from(value.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 }
 
 export async function getPublicKey(secret: string): Promise<PublicKeyResponse> {

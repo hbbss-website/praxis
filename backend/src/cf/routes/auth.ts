@@ -59,7 +59,7 @@ async function finishLogin(user: User, c: Context<CFAppBindings>) {
 
 function createLoginChallenge(users: User[]) {
   const challengeBytes = crypto.getRandomValues(new Uint8Array(32));
-  const challenge = btoa(String.fromCharCode(...challengeBytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const challenge = Buffer.from(challengeBytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   loginChallenges.set(challenge, { userIds: new Set(users.map((u) => u.id)), expiresAt: Date.now() + loginChallengeTtlMs });
   return challenge;
 }
