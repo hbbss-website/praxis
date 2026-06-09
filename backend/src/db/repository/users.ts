@@ -174,14 +174,13 @@ export function deleteUser(id: number) {
   const user = db.select().from(users).where(activeUserById(id)).get();
   if (!user) return false;
   const now = nowIso();
-  db.transaction((tx) => {
-    tx.update(practiceRecords)
-      .set({ studentUidSnapshot: user.id })
-      .where(and(eq(practiceRecords.studentId, user.id), sql`${practiceRecords.studentUidSnapshot} is null`))
-      .run();
-    if (user.role === 'teacher') tx.delete(classTeachers).where(eq(classTeachers.teacherId, user.id)).run();
-    tx.update(users).set({ deletedAt: now }).where(eq(users.id, user.id)).run();
-  });
+  db.update(practiceRecords)
+    .set({ studentUidSnapshot: user.id })
+    .where(and(eq(practiceRecords.studentId, user.id), sql`${practiceRecords.studentUidSnapshot} is null`))
+    .run();
+  if (user.role === 'teacher') db.delete(classTeachers).where(eq(classTeachers.teacherId, user.id)).run();
+  if (user.role === 'student') db.delete(classStudents).where(eq(classStudents.studentId, user.id)).run();
+  db.update(users).set({ deletedAt: now }).where(eq(users.id, user.id)).run();
   return true;
 }
 

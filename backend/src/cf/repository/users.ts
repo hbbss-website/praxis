@@ -160,14 +160,13 @@ export async function deleteUser(db: D1DB, id: number) {
   const user = await db.select().from(users).where(activeById(id)).get();
   if (!user) return false;
   const now = nowIso();
-  await db.transaction(async (tx) => {
-    await tx.update(practiceRecords)
-      .set({ studentUidSnapshot: user.id })
-      .where(and(eq(practiceRecords.studentId, user.id), sql`${practiceRecords.studentUidSnapshot} is null`))
-      .run();
-    if (user.role === 'teacher') await tx.delete(classTeachers).where(eq(classTeachers.teacherId, user.id)).run();
-    await tx.update(users).set({ deletedAt: now }).where(eq(users.id, user.id)).run();
-  });
+  await db.update(practiceRecords)
+    .set({ studentUidSnapshot: user.id })
+    .where(and(eq(practiceRecords.studentId, user.id), sql`${practiceRecords.studentUidSnapshot} is null`))
+    .run();
+  if (user.role === 'teacher') await db.delete(classTeachers).where(eq(classTeachers.teacherId, user.id)).run();
+  if (user.role === 'student') await db.delete(classStudents).where(eq(classStudents.studentId, user.id)).run();
+  await db.update(users).set({ deletedAt: now }).where(eq(users.id, user.id)).run();
   return true;
 }
 
