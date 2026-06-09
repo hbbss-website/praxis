@@ -24,7 +24,7 @@
     "cf:dev": "wrangler pages dev frontend/dist --compatibility-date=2025-01-01 --compatibility-flags=nodejs_compat",
     "cf:deploy": "pnpm build && wrangler pages deploy frontend/dist",
     "cf:d1:create": "wrangler d1 create praxis",
-    "cf:d1:migrate": "wrangler d1 execute praxis --file=backend/drizzle/0000_initial/migration.sql",
+    "cf:d1:migrate": "npx wrangler d1 execute donepraxis --file=backend/drizzle/20260530113226_cool_thor/migration.sql --remote && npx wrangler d1 execute donepraxis --file=backend/drizzle/20260530121336_whole_saracen/migration.sql --remote",
     "cf:kv:create": "wrangler kv namespace create praxis-kv",
     "cf:r2:create": "wrangler r2 bucket create praxis-uploads",
     "prepare": "husky"

@@ -228,7 +228,7 @@ export const cfAuthRoutes = new Hono<CFAppBindings>()
     try { currentPassword = await decryptEnvelope(body.current_password, secret); } catch { currentPassword = body.current_password; }
     try { newPassword = await decryptEnvelope(body.new_password, secret); } catch { newPassword = body.new_password; }
 
-    const passwordError = validatePassword(newPassword);
+    const passwordError = validatePassword(newPassword, getCFConfig(c.env).is_production);
     if (passwordError) return apiError(c, 400, passwordError);
     const matched = await verifyPassword(currentPassword, userRecord.password);
     if (!matched) return apiError(c, 401, '当前密码错误。');

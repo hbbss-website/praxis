@@ -176,8 +176,18 @@ export function isValidRole(role: unknown): role is UserRole {
 }
 
 export async function seedDefaultAdmin(db: D1DB, cfg: CFConfig) {
-  const row = await db.select({ count: sql<number>`count(*)` }).from(users).get();
-  if (row?.count && Number(row.count) > 0) return;
+  const admins = await db.select({ id: users.id }).from(users)
+    .where(and(eq(users.role, 'admin'), isNull(users.deletedAt)))
+    .orderBy(users.id)
+    .all();
+  if (admins.length > 1) {
+    const now = nowIso();
+    for (let i = 1; i < admins.length; i++) {
+      await db.update(users).set({ deletedAt: now }).where(eq(users.id, admins[i]!.id)).run();
+      console.log('清理重复管理员账号 (UID %d)', admins[i]!.id);
+    }
+  }
+  if (admins.length > 0) return;
   const password = cfg.initial_admin_password;
   const hashed = await hashPassword(password, 'low');
   const [inserted] = await db.insert(users).values([{

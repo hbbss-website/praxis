@@ -139,7 +139,7 @@ export const cfAdminRoutes = new Hono<CFAppBindings>()
       let password: string;
       try { password = await decryptEnvelope(body.password, getCFConfig(c.env).jwt_secret); }
       catch { password = body.password; }
-      const e = validatePassword(password);
+      const e = validatePassword(password, getCFConfig(c.env).is_production);
       if (e) return apiError(c, 400, e);
       await c.var.db.updateUserPassword(user.id, await hashPassword(password));
     }

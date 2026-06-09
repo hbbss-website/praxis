@@ -251,12 +251,12 @@ export function validateEnglishName(name: string | null | undefined) {
   return null;
 }
 
-export function validatePassword(password: string) {
+export function validatePassword(password: string, isProduction?: boolean) {
   if (!password) {
     return '密码不能为空。';
   }
 
-  if (!appConfig.is_production) {
+  if (!(isProduction ?? appConfig.is_production)) {
     return null;
   }
 
