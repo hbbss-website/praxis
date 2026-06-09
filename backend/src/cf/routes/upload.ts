@@ -59,9 +59,14 @@ export const cfUploadRoutes = new Hono<CFAppBindings>()
     const key = `tmp-uploads/${filename}`;
     const imagePath = `/tmp-uploads/${filename}`;
 
+    const authedUser = c.var.user!;
     await c.env.UPLOADS.put(key, buffer, {
       httpMetadata: { contentType: imageType },
-      customMetadata: { uploaded_by: String(c.var.user!.id), expires_at: new Date(Date.now() + cfg.temp_upload_ttl_ms).toISOString() }
+      customMetadata: {
+        uploaded_by: String(authedUser.id),
+        student_id: authedUser.role === 'student' ? String(authedUser.id) : '',
+        expires_at: new Date(Date.now() + cfg.temp_upload_ttl_ms).toISOString()
+      }
     });
 
     await c.var.db.enqueueTempUpload(imagePath);
