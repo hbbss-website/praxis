@@ -110,7 +110,7 @@ function createDefaultConfig(): AppConfig {
     overview_class_ranking_limit: 30,
     overview_student_ranking_limit: 30,
     generated_password_length: 8,
-    initial_admin_password: "12345678",
+    initial_admin_password: "admin",
     upload_webp_quality: 76,
     upload_max_image_dimension: 1920,
     upload_webp_effort: 5,

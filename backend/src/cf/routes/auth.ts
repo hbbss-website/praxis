@@ -1,6 +1,5 @@
 import { Hono, type Context } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { randomBytes } from 'node:crypto';
 import type { CFAppBindings } from '../auth-plugin';
 import { authMiddleware, signAccessToken, setAuthCookie, clearAuthCookie } from '../auth-plugin';
 import { hashPassword, isLowCostPasswordHash, verifyPassword } from '../password';
@@ -59,7 +58,8 @@ async function finishLogin(user: User, c: Context<CFAppBindings>) {
 }
 
 function createLoginChallenge(users: User[]) {
-  const challenge = randomBytes(32).toString('base64url');
+  const challengeBytes = crypto.getRandomValues(new Uint8Array(32));
+  const challenge = btoa(String.fromCharCode(...challengeBytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   loginChallenges.set(challenge, { userIds: new Set(users.map((u) => u.id)), expiresAt: Date.now() + loginChallengeTtlMs });
   return challenge;
 }

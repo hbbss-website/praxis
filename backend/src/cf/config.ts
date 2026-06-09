@@ -32,7 +32,7 @@ export function getCFConfig(env: Env) {
     overview_class_ranking_limit: int(env.OVERVIEW_CLASS_RANKING_LIMIT, 30),
     overview_student_ranking_limit: int(env.OVERVIEW_STUDENT_RANKING_LIMIT, 30),
     generated_password_length: int(env.GENERATED_PASSWORD_LENGTH, 8),
-    initial_admin_password: str(env.INITIAL_ADMIN_PASSWORD, '12345678'),
+        initial_admin_password: str(env.INITIAL_ADMIN_PASSWORD, 'admin'),
     csv_import_max_size_bytes: int(env.CSV_IMPORT_MAX_SIZE_BYTES, 50 * 1024 * 1024),
     user_name_max_length: int(env.USER_NAME_MAX_LENGTH, 40),
     title_max_length: int(env.TITLE_MAX_LENGTH, 120),

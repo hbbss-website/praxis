@@ -136,7 +136,7 @@ async function main() {
   }
 
   console.log('Mock data created.');
-  console.log(`Admin: A00001 / 12345678`);
+  console.log(`Admin: A00001 / admin`);
   console.log(`Teacher: ${teacherA!.uid} / ${teacherPassword}`);
   console.log(`Teacher: ${teacherB!.uid} / ${teacherPassword}`);
   console.log(`Student: ${students[0]!.uid} / ${studentPassword}`);

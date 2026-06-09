@@ -62,7 +62,7 @@ pnpm start
 | `overview_class_ranking_limit` | 概览页班级排名显示数量 | `30` |
 | `overview_student_ranking_limit` | 概览页学生排名显示数量 | `30` |
 | `generated_password_length` | 批量创建用户时的生成密码长度 | `8` |
-| `initial_admin_password` | 首次启动自动创建的默认管理员密码 | `"12345678"` |
+| `initial_admin_password` | 首次启动自动创建的默认管理员密码 | `"admin"` |
 | `csv_import_max_size_bytes` | CSV 批量导入文件大小上限（字节） | `52428800`（50 MiB） |
 | `user_name_max_length` | 用户姓名最大长度 | `40` |
 | `title_max_length` | 记录/任务标题最大长度 | `120` |
@@ -75,7 +75,7 @@ pnpm start
 
 | 角色 | UID | 密码 |
 | --- | --- | --- |
-| 管理员 | `1` | `initial_admin_password` |
+| 管理员 | `1` | `admin` |
 
 ## CSV 导入
 

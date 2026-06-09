@@ -196,9 +196,9 @@ export function seedDefaultAdmin() {
   const result = db.insert(users).values([{
     password: hashPasswordSync(password, 'low'),
     role: 'admin',
-    name: '超级奶龙',
+    name: 'admin',
     englishName: null,
-    nameInitials: getPinyinInitials('超级奶龙'),
+    nameInitials: getPinyinInitials('admin'),
     createdAt: nowIso(),
     deletedAt: null
   }]).run();
