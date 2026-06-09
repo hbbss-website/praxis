@@ -30,7 +30,7 @@ MAX_RECORD_DURATION = "24"
 [[d1_databases]]
 binding = "DB"
 database_name = "donepraxis"
-database_id = "8dba006b-fcf7-4d29-aea1-7db4f24c7712"
+database_id = "9bda6d66-15b6-4762-889c-91112da84658"
 
 [[r2_buckets]]
 binding = "UPLOADS"
